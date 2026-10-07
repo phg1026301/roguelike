@@ -64,6 +64,8 @@ export function newGame() {
     turns: 0,
     over: false,
     deathCause: null,
+    fx: [],
+    hurtTurn: -1,
     messages: ['던전에 들어왔다. 계단(>)을 찾아 내려가자!'],
     ...buildFloor(1, player),
   }
@@ -131,6 +133,8 @@ function monstersAct(state) {
     if (Math.abs(dx) + Math.abs(dy) === 1) {
       const dmg = randInt(Math.max(1, m.atk - 1), m.atk)
       p.hp -= dmg
+      state.fx.push({ x: p.x, y: p.y, kind: 'hurt', text: `-${dmg}` })
+      state.hurtTurn = state.turns + 1
       log(state, `${m.name}에게 ${dmg} 피해를 입었다.`)
       if (p.hp <= 0) {
         p.hp = 0
@@ -168,6 +172,7 @@ function endTurn(state) {
 export function move(prev, dx, dy) {
   if (prev.over) return prev
   const state = structuredClone(prev)
+  state.fx = []
   const p = state.player
   const nx = p.x + dx
   const ny = p.y + dy
@@ -176,6 +181,7 @@ export function move(prev, dx, dy) {
   if (target) {
     const dmg = randInt(Math.max(1, p.atk - 1), p.atk + 1)
     target.hp -= dmg
+    state.fx.push({ x: target.x, y: target.y, kind: 'hit', text: `${dmg}` })
     if (target.hp <= 0) {
       state.monsters = state.monsters.filter((m) => m.id !== target.id)
       state.kills += 1
@@ -214,7 +220,9 @@ export function move(prev, dx, dy) {
 
 export function wait(prev) {
   if (prev.over) return prev
-  return endTurn(structuredClone(prev))
+  const state = structuredClone(prev)
+  state.fx = []
+  return endTurn(state)
 }
 
 export function drinkPotion(prev) {
@@ -225,10 +233,12 @@ export function drinkPotion(prev) {
     return state
   }
   const state = structuredClone(prev)
+  state.fx = []
   const p = state.player
   const healed = Math.min(POTION_HEAL, p.maxHp - p.hp)
   p.hp += healed
   p.potions -= 1
+  state.fx.push({ x: p.x, y: p.y, kind: 'heal', text: `+${healed}` })
   log(state, `포션을 마셨다. HP +${healed}`)
   return endTurn(state)
 }
