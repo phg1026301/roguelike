@@ -368,3 +368,140 @@ button.kakao:disabled { opacity: 0.6; cursor: wait; }
 .ranking .pts { font-family: 'Press Start 2P', monospace; font-size: 10px; color: #eee; }
 .ranking .meta { font-size: 11px; color: #6f6880; text-align: right; }
 .ranking .empty { font-size: 12px; color: #6f6880; }
+
+/* 레벨 / 경험치 */
+.level {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.level .lv {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 11px;
+  color: #7fd3ff;
+}
+
+.xpbar {
+  flex: 1;
+  height: 8px;
+  background: #13203a;
+  border: 1px solid #2c4a7a;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.xpbar div {
+  height: 100%;
+  background: linear-gradient(90deg, #3a7bd5, #7fd3ff);
+  transition: width 0.2s;
+}
+
+.level .xp {
+  font-size: 11px;
+  color: #8a8296;
+  min-width: 46px;
+  text-align: right;
+}
+
+.perks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.perk {
+  position: relative;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  background: #1b1424;
+  border: 2px solid #4a3266;
+  border-radius: 6px;
+  cursor: help;
+}
+
+.perk small {
+  position: absolute;
+  right: -4px;
+  bottom: -6px;
+  font-size: 10px;
+  font-weight: bold;
+  color: #f0c060;
+  text-shadow: 1px 1px 0 #000;
+}
+
+/* 레벨업 카드 선택 */
+.overlay.levelup h2 {
+  color: #7fd3ff;
+  text-shadow: 4px 4px 0 #13203a;
+}
+
+.cards {
+  display: flex;
+  gap: 14px;
+  margin-top: 18px;
+  flex-wrap: wrap;
+  justify-content: center;
+  padding: 0 12px;
+}
+
+.overlay .card {
+  position: relative;
+  width: 160px;
+  min-height: 190px;
+  margin: 0;
+  padding: 18px 12px 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  background: linear-gradient(180deg, #2a1f3a, #18111f);
+  border: 3px solid #5b3f7a;
+  border-radius: 12px;
+  color: #f2ecff;
+  cursor: pointer;
+  transition: transform 0.12s, border-color 0.12s;
+}
+
+.overlay .card:hover {
+  transform: translateY(-6px);
+  border-color: #f0c060;
+  background: linear-gradient(180deg, #34264a, #1d1526);
+}
+
+.card-key {
+  position: absolute;
+  top: 8px;
+  left: 10px;
+  font-family: 'Press Start 2P', monospace;
+  font-size: 10px;
+  color: #8a8296;
+}
+
+.card-icon { font-size: 40px; line-height: 1.2; }
+.card b { font-size: 15px; color: #f0c060; }
+.card-desc { font-size: 13px; color: #c9c0d8; line-height: 1.4; }
+.card-owned { font-size: 11px; color: #7fd3ff; margin-top: auto; }
+
+.levelup-guide {
+  margin-top: 6px !important;
+  font-size: 13px;
+  color: #c9c0d8;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+.levelup-guide b { color: #f0c060; }
+.levelup-guide .remaining {
+  padding: 4px 10px;
+  border-radius: 12px;
+  background: rgba(127, 211, 255, 0.12);
+  border: 1px solid #2c4a7a;
+  color: #7fd3ff;
+  font-size: 12px;
+}

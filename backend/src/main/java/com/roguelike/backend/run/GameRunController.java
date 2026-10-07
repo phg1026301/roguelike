@@ -26,6 +26,7 @@ public class GameRunController {
     public record SaveRunRequest(
             @Min(1) @Max(999) int depth,
             @Min(0) @Max(9999) int kills,
+            @Min(0) @Max(200) Integer bossKills,
             @Min(0) @Max(1000000) int turns,
             @Size(max = 30) String deathCause) {
     }
@@ -49,9 +50,12 @@ public class GameRunController {
         run.setDepth(req.depth());
         run.setKills(req.kills());
         run.setTurns(req.turns());
+        // 보스는 5층마다 1마리뿐이라 그보다 많으면 잘라낸다
+        int bossKills = Math.min(req.bossKills() == null ? 0 : req.bossKills(), req.depth() / 5);
+        run.setBossKills(bossKills);
         run.setDeathCause(req.deathCause());
         // 점수는 서버에서 계산 (조작 방지)
-        run.setScore(req.depth() * 100 + req.kills() * 10);
+        run.setScore(req.depth() * 100 + req.kills() * 10 + bossKills * 500);
         runs.save(run);
         long rank = runs.countByScoreGreaterThan(run.getScore()) + 1;
         return new SaveRunResponse(run.getId(), run.getScore(), rank);

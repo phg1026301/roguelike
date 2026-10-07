@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import './App.css'
-import { newGame, move, wait, drinkPotion, score } from './game/engine'
+import { newGame, move, wait, drinkPotion, score, chooseCard, CARDS, xpToNext } from './game/engine'
 import { render, TILE, VIEW_W, VIEW_H } from './game/renderer'
 import { api, loadAuth, saveAuth, clearAuth, savePendingRun, takePendingRun, runFromGame } from './api'
 
@@ -94,6 +94,8 @@ function App() {
         setGame((g) => wait(g))
       } else if (key === 'q') {
         setGame((g) => drinkPotion(g))
+      } else if (key === '1' || key === '2' || key === '3') {
+        setGame((g) => chooseCard(g, Number(key) - 1))
       } else if (key === 'r') {
         setGame((g) => (g.over ? newGame() : g))
       }
@@ -161,12 +163,41 @@ function App() {
 
           <div className="floor-badge">B{game.depth}</div>
 
+          {game.levelUp && !game.over && (
+            <div className="overlay levelup">
+              <h2>LEVEL UP!</h2>
+              <p className="sub">Lv.{p.level} — 보상을 하나 고르세요</p>
+              <p className="levelup-guide">
+                카드를 <b>클릭</b>하거나 키보드 <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> 으로 선택
+                {game.pendingLevelUps > 1 && (
+                  <span className="remaining">
+                    한 번에 여러 레벨이 올랐어요! 이번 선택 후 <b>{game.pendingLevelUps - 1}번</b> 더 고를 수 있어요
+                  </span>
+                )}
+              </p>
+              <div className="cards">
+                {game.levelUp.cards.map((id, i) => (
+                  <button key={id} className="card" onClick={() => setGame((g) => chooseCard(g, i))}>
+                    <span className="card-key">{i + 1}</span>
+                    <span className="card-icon">{CARDS[id].icon}</span>
+                    <b>{CARDS[id].name}</b>
+                    <span className="card-desc">{CARDS[id].desc}</span>
+                    {p.perks[id] ? <span className="card-owned">보유 x{p.perks[id]}</span> : null}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           {game.over && (
             <div className="overlay">
               <h2>GAME OVER</h2>
               <p>{game.deathCause}에게 쓰러졌다</p>
               <p className="final-score">{score(game)}</p>
-              <p className="sub">지하 {game.depth}층 · 처치 {game.kills} · {game.turns}턴</p>
+              <p className="sub">
+                지하 {game.depth}층 · 처치 {game.kills}
+                {game.bossKills > 0 && ` · 👑 보스 ${game.bossKills}`} · {game.turns}턴
+              </p>
 
               <div className="save-status">
                 {auth && !result && <span>점수 저장 중...</span>}
@@ -202,6 +233,25 @@ function App() {
             </div>
           </div>
           <div className="hp-text">HP {p.hp} / {p.maxHp}</div>
+
+          <div className="level">
+            <span className="lv">Lv.{p.level}</span>
+            <div className="xpbar">
+              <div style={{ width: `${Math.round((p.xp / xpToNext(p.level)) * 100)}%` }} />
+            </div>
+            <span className="xp">{p.xp}/{xpToNext(p.level)}</span>
+          </div>
+
+          {Object.keys(p.perks).length > 0 && (
+            <div className="perks">
+              {Object.entries(p.perks).map(([id, n]) => (
+                <span key={id} className="perk" title={`${CARDS[id].name}: ${CARDS[id].desc}`}>
+                  {CARDS[id].icon}
+                  {n > 1 && <small>x{n}</small>}
+                </span>
+              ))}
+            </div>
+          )}
 
           <div className="panel stats">
             <div><span>층</span><b>B{game.depth}</b></div>

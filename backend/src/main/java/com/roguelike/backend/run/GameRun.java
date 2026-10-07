@@ -27,6 +27,9 @@ public class GameRun {
     private int score;
     private int depth;
     private int kills;
+
+    @Column(nullable = false, columnDefinition = "int default 0")
+    private int bossKills;
     private int turns;
 
     @Column(length = 30)

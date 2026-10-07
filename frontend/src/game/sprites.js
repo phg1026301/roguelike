@@ -8,6 +8,8 @@ const PALETTE = {
   g: '#3f8f3f', G: '#5cc05c', Y: '#ffdd00', m: '#234023', L: '#7a5230', l: '#5a3b20', d: '#c8c8d0',
   // 오크
   O: '#7f9a43', o: '#5f7630', r: '#ff3030', T: '#fffbe8', M: '#2a1a10', A: '#8a3030', a: '#6a2222', K: '#4a3a2a',
+  // 보스
+  Z: '#4a3470', z: '#2e2048', X: '#a3a85a', x: '#7d8240', E: '#ffe14a', F: '#ff2d2d',
   // 포션
   w: '#d8e4f0', P: '#e04a8a', i: '#ff9cc8', C: '#8a5a2b',
 }
@@ -72,6 +74,23 @@ const SPRITE_DATA = {
     '...KKKK..KKKK...',
     '...KKKK..KKKK...',
     '...MMMM..MMMM...',
+  ],
+  boss: [
+    '...E..E..E..E...',
+    '...EEEEEEEEEE...',
+    '..xXXXXXXXXXXx..',
+    '..XXFFXXXXFFXX..',
+    '..XXXXXXXXXXXX..',
+    '..XTXMMMMMMXTX..',
+    '...XXXXXXXXXX...',
+    '.ZZZZZZZZZZZZZZ.',
+    'XZZZzZZZZZZzZZZX',
+    'XZZZZZEEEEZZZZZX',
+    'XXZZZZZZZZZZZZXX',
+    'X.ZZZZZZZZZZZZ.X',
+    '..KKKKK..KKKKK..',
+    '..KKKKK..KKKKK..',
+    '..MMMMM..MMMMM..',
   ],
   potion: [
     '.......CC.......',

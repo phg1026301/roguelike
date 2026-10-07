@@ -1,13 +1,13 @@
 // 캔버스에 던전을 픽셀아트로 그린다
 import { W, H } from './dungeon'
 import { getSprite } from './sprites'
+import { BASE_VIEW } from './engine'
 
 export const TILE = 16
 export const VIEW_W = 21 // 화면에 보이는 가로 칸 수 (카메라)
 export const VIEW_H = 13
-const VIEW = 7
 
-const MONSTER_SPRITE = { r: 'rat', g: 'goblin', O: 'orc' }
+const MONSTER_SPRITE = { r: 'rat', g: 'goblin', O: 'orc', B: 'boss' }
 
 function hash(x, y, s = 0) {
   let h = (x * 374761393 + y * 668265263 + s * 982451653) | 0
@@ -89,6 +89,40 @@ function drawWall(ctx, tiles, tx, ty) {
   }
 }
 
+function drawSeal(ctx, tx, ty) {
+  const X = tx * TILE
+  const Y = ty * TILE
+  px(ctx, X + 1, Y + 1, 14, 14, 'rgba(160,20,40,0.45)')
+  ctx.strokeStyle = '#ff4a5a'
+  ctx.lineWidth = 1.5
+  ctx.beginPath()
+  ctx.moveTo(X + 3, Y + 3)
+  ctx.lineTo(X + 13, Y + 13)
+  ctx.moveTo(X + 13, Y + 3)
+  ctx.lineTo(X + 3, Y + 13)
+  ctx.stroke()
+}
+
+function drawBoss(ctx, tx, ty) {
+  const X = tx * TILE
+  const Y = ty * TILE
+  const sprite = getSprite('boss')
+  const scale = 1.5
+  const w = sprite.width * scale
+  const h = sprite.height * scale
+  // 붉은 기운
+  const aura = ctx.createRadialGradient(X + 8, Y + 8, 2, X + 8, Y + 8, 18)
+  aura.addColorStop(0, 'rgba(255,40,60,0.35)')
+  aura.addColorStop(1, 'rgba(255,40,60,0)')
+  ctx.fillStyle = aura
+  ctx.fillRect(X - 12, Y - 12, 40, 40)
+  ctx.fillStyle = 'rgba(0,0,0,0.45)'
+  ctx.beginPath()
+  ctx.ellipse(X + 8, Y + 15, 8, 2.5, 0, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.drawImage(sprite, X + 8 - w / 2, Y + 16 - h, w, h)
+}
+
 function drawStairs(ctx, tx, ty) {
   const X = tx * TILE
   const Y = ty * TILE
@@ -112,8 +146,8 @@ function drawEntity(ctx, name, tx, ty) {
   ctx.drawImage(sprite, X, Y + 15 - sprite.height)
 }
 
-function drawText(ctx, text, x, y, color) {
-  ctx.font = 'bold 8px monospace'
+function drawText(ctx, text, x, y, color, size = 8) {
+  ctx.font = `bold ${size}px monospace`
   ctx.textAlign = 'center'
   ctx.lineWidth = 2
   ctx.strokeStyle = '#000'
@@ -151,6 +185,8 @@ export function render(ctx, game) {
   ctx.imageSmoothingEnabled = false
   px(ctx, 0, 0, VIEW_W * TILE, VIEW_H * TILE, '#07060a')
   const { tiles, visible, explored, player } = game
+  const boss = game.monsters.find((m) => m.boss)
+  const bossAlive = Boolean(boss)
 
   // 카메라: 플레이어를 화면 가운데에 두되 맵 밖은 안 보이게
   const camX = Math.max(0, Math.min(W - VIEW_W, player.x - Math.floor(VIEW_W / 2)))
@@ -164,7 +200,10 @@ export function render(ctx, game) {
       if (!explored[y][x]) continue
       const t = tiles[y][x]
       if (t === '#') drawWall(ctx, tiles, x, y)
-      else if (t === '>') drawStairs(ctx, x, y)
+      else if (t === '>') {
+        drawStairs(ctx, x, y)
+        if (bossAlive) drawSeal(ctx, x, y)
+      }
       else drawFloor(ctx, x, y)
     }
   }
@@ -176,7 +215,7 @@ export function render(ctx, game) {
       let a = 0.72
       if (visible[y][x]) {
         const dist = Math.hypot(x - player.x, y - player.y)
-        a = Math.min(0.5, (dist / (VIEW + 1)) ** 2 * 0.5)
+        a = Math.min(0.5, (dist / (BASE_VIEW + (player.vision || 0) + 1)) ** 2 * 0.5)
       }
       if (a > 0.01) px(ctx, x * TILE, y * TILE, TILE, TILE, `rgba(6,5,12,${a})`)
     }
@@ -188,8 +227,9 @@ export function render(ctx, game) {
   }
   for (const m of game.monsters) {
     if (!visible[m.y][m.x]) continue
-    drawEntity(ctx, MONSTER_SPRITE[m.ch], m.x, m.y)
-    if (m.hp < m.maxHp) {
+    if (m.boss) drawBoss(ctx, m.x, m.y)
+    else drawEntity(ctx, MONSTER_SPRITE[m.ch], m.x, m.y)
+    if (!m.boss && m.hp < m.maxHp) {
       px(ctx, m.x * TILE + 2, m.y * TILE - 1, 12, 2, '#3a0d0d')
       px(ctx, m.x * TILE + 2, m.y * TILE - 1, Math.max(1, Math.round((12 * m.hp) / m.maxHp)), 2, '#e83b3b')
     }
@@ -219,6 +259,17 @@ export function render(ctx, game) {
     } else if (fx.kind === 'hurt') {
       px(ctx, fx.x * TILE, Y, TILE, TILE, 'rgba(255,40,40,0.25)')
       drawText(ctx, fx.text, X, Y - 2 - n * 8, '#ff6b6b')
+    } else if (fx.kind === 'crit') {
+      // 치명타: 연보라색 큰 숫자 + 반짝임
+      px(ctx, X - 6, Y + 4, 12, 1, '#e3c8ff')
+      px(ctx, X - 1, Y - 1, 1, 12, '#e3c8ff')
+      px(ctx, X - 4, Y + 1, 1, 1, '#ffffff')
+      px(ctx, X + 4, Y + 8, 1, 1, '#ffffff')
+      px(ctx, X + 5, Y + 1, 1, 1, '#c9a0ff')
+      drawText(ctx, 'CRIT', X, Y - 15 - n * 14, '#d9b8ff', 6)
+      drawText(ctx, fx.text, X, Y - 4 - n * 14, '#c9a0ff', 13)
+    } else if (fx.kind === 'warn') {
+      drawText(ctx, '!', X, Y - 8, '#ff3b3b', 14)
     } else if (fx.kind === 'heal') {
       drawText(ctx, fx.text, X, Y - 2 - n * 8, '#7dff9a')
     }
@@ -226,6 +277,17 @@ export function render(ctx, game) {
 
   ctx.restore()
   drawMinimap(ctx, game)
+
+  // 보스 HP바 (보스가 보일 때)
+  if (boss && visible[boss.y][boss.x]) {
+    const bw = 180
+    const bx = (VIEW_W * TILE - bw) / 2
+    const by = VIEW_H * TILE - 16
+    px(ctx, bx - 2, by - 2, bw + 4, 10, 'rgba(10,4,14,0.85)')
+    px(ctx, bx, by, bw, 6, '#3a0d14')
+    px(ctx, bx, by, Math.max(1, Math.round((bw * boss.hp) / boss.maxHp)), 6, boss.windup ? '#ff9a3b' : '#e0263f')
+    drawText(ctx, `👑 ${boss.name}  ${boss.hp}/${boss.maxHp}`, VIEW_W * TILE / 2, by - 5, '#ffd6dc', 7)
+  }
 
   // 6) 맞은 턴엔 화면 가장자리를 붉게
   if (game.hurtTurn === game.turns) {
