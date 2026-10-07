@@ -14,7 +14,7 @@ function App() {
 
   return (
     <div style={{ padding: 40, fontFamily: 'sans-serif' }}>
-      <h1>Roguelike</h1>
+      <h1>Roguelike v2</h1>
       <p>Backend: {status}</p>
     </div>
   )
