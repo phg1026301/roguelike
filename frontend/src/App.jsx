@@ -1,27 +1,86 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import './App.css'
 import { newGame, move, wait, drinkPotion, score } from './game/engine'
 import { render, TILE, VIEW_W, VIEW_H } from './game/renderer'
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080'
+import { api, loadAuth, saveAuth, clearAuth, savePendingRun, takePendingRun, runFromGame } from './api'
 
 const KEY_DIRS = {
   ArrowUp: [0, -1], ArrowDown: [0, 1], ArrowLeft: [-1, 0], ArrowRight: [1, 0],
   w: [0, -1], s: [0, 1], a: [-1, 0], d: [1, 0],
 }
 
+// React 개발 모드에서 effect가 두 번 실행돼도 한 번만 처리되게
+let kakaoCallbackHandled = false
+const savedGames = new WeakSet()
+
 function App() {
   const [game, setGame] = useState(newGame)
   const [server, setServer] = useState('확인 중')
+  const [auth, setAuth] = useState(loadAuth)
+  const [ranking, setRanking] = useState([])
+  const [saveResult, setSaveResult] = useState(null) // { game, rank } 또는 { game, error }
+  const [notice, setNotice] = useState('')
+  const [loggingIn, setLoggingIn] = useState(false)
   const canvasRef = useRef(null)
 
-  // 첫 접속 때 백엔드를 미리 깨워둔다 (Render 무료 플랜은 잠들어 있을 수 있음)
-  useEffect(() => {
-    fetch(`${API_URL}/api/health`)
-      .then((res) => res.text())
-      .then((text) => setServer(text === 'OK' ? '연결됨' : text))
-      .catch(() => setServer('연결 안 됨'))
+  const refreshRanking = useCallback(() => {
+    api.ranking().then(setRanking).catch(() => {})
   }, [])
+
+  // 첫 접속: 서버 깨우기 + 랭킹 불러오기
+  useEffect(() => {
+    api.health()
+      .then((text) => setServer(text === 'OK' ? '연결됨' : String(text)))
+      .catch(() => setServer('연결 안 됨'))
+    refreshRanking()
+  }, [refreshRanking])
+
+  // 카카오 로그인 후 돌아온 경우 (/oauth/kakao?code=...)
+  useEffect(() => {
+    if (window.location.pathname !== '/oauth/kakao' || kakaoCallbackHandled) return
+    kakaoCallbackHandled = true
+    const code = new URLSearchParams(window.location.search).get('code')
+    window.history.replaceState({}, '', '/')
+    if (!code) {
+      takePendingRun()
+      Promise.resolve().then(() => setNotice('카카오 로그인이 취소되었어요.'))
+      return
+    }
+    api.kakaoLogin(code)
+      .then(async (res) => {
+        saveAuth(res)
+        setAuth(res)
+        const pending = takePendingRun()
+        if (pending) {
+          const saved = await api.saveRun(res.token, pending)
+          setNotice(`${res.nickname}님, 지난 기록(${saved.score}점)이 랭킹 ${saved.rank}위로 등록됐어요!`)
+          refreshRanking()
+        } else {
+          setNotice(`${res.nickname}님, 환영해요!`)
+        }
+      })
+      .catch(() => setNotice('로그인에 실패했어요. 다시 시도해주세요.'))
+  }, [refreshRanking])
+
+  // 로그인한 상태로 게임 오버 → 자동으로 점수 저장
+  useEffect(() => {
+    if (!game.over || !auth || savedGames.has(game)) return
+    savedGames.add(game)
+    api.saveRun(auth.token, runFromGame(game))
+      .then((res) => {
+        setSaveResult({ game, rank: res.rank })
+        refreshRanking()
+      })
+      .catch((err) => {
+        if (err.status === 401) {
+          clearAuth()
+          setAuth(null)
+          setSaveResult({ game, error: '로그인이 만료됐어요. 다시 로그인해주세요.' })
+        } else {
+          setSaveResult({ game, error: '점수 저장에 실패했어요.' })
+        }
+      })
+  }, [game, auth, refreshRanking])
 
   useEffect(() => {
     function onKey(e) {
@@ -45,20 +104,56 @@ function App() {
 
   // 게임 상태가 바뀔 때마다 캔버스를 다시 그린다
   useEffect(() => {
-    const ctx = canvasRef.current.getContext('2d')
-    render(ctx, game)
+    render(canvasRef.current.getContext('2d'), game)
   }, [game])
+
+  async function startKakaoLogin(saveCurrentRun) {
+    if (saveCurrentRun) savePendingRun(runFromGame(game))
+    setLoggingIn(true)
+    try {
+      const { url } = await api.loginUrl()
+      window.location.href = url
+    } catch {
+      setLoggingIn(false)
+      setNotice('서버가 깨어나는 중이에요. 잠시 후 다시 눌러주세요.')
+    }
+  }
+
+  function logout() {
+    clearAuth()
+    setAuth(null)
+    setNotice('로그아웃했어요.')
+  }
 
   const p = game.player
   const hpPercent = Math.round((p.hp / p.maxHp) * 100)
   const lowHp = hpPercent <= 30
+  const result = saveResult && saveResult.game === game ? saveResult : null
 
   return (
     <div className="app">
       <header>
         <h1>ROGUELIKE</h1>
-        <span className={`server ${server === '연결됨' ? 'ok' : ''}`}>● 서버 {server}</span>
+        <div className="header-right">
+          <span className={`server ${server === '연결됨' ? 'ok' : ''}`}>● 서버 {server}</span>
+          {auth ? (
+            <span className="user">
+              <b>{auth.nickname}</b>님
+              <button className="link" onClick={logout}>로그아웃</button>
+            </span>
+          ) : (
+            <button className="kakao" onClick={() => startKakaoLogin(false)} disabled={loggingIn}>
+              {loggingIn ? '이동 중...' : '카카오 로그인'}
+            </button>
+          )}
+        </div>
       </header>
+
+      {notice && (
+        <div className="notice" onClick={() => setNotice('')}>
+          {notice} <span>✕</span>
+        </div>
+      )}
 
       <main>
         <div className="board-wrap">
@@ -72,6 +167,18 @@ function App() {
               <p>{game.deathCause}에게 쓰러졌다</p>
               <p className="final-score">{score(game)}</p>
               <p className="sub">지하 {game.depth}층 · 처치 {game.kills} · {game.turns}턴</p>
+
+              <div className="save-status">
+                {auth && !result && <span>점수 저장 중...</span>}
+                {result?.rank && <span className="ok">🏆 랭킹 {result.rank}위로 등록됐어요!</span>}
+                {result?.error && <span className="err">{result.error}</span>}
+                {!auth && (
+                  <button className="kakao" onClick={() => startKakaoLogin(true)} disabled={loggingIn}>
+                    {loggingIn ? '이동 중...' : '카카오 로그인하고 랭킹 등록'}
+                  </button>
+                )}
+              </div>
+
               <button onClick={() => setGame(newGame())}>다시 하기 (R)</button>
             </div>
           )}
@@ -106,6 +213,24 @@ function App() {
             {game.messages.map((m, i) => (
               <div key={i} className={i === game.messages.length - 1 ? 'latest' : ''}>{m}</div>
             ))}
+          </div>
+
+          <div className="panel ranking">
+            <div className="panel-title">🏆 랭킹 TOP 10</div>
+            {ranking.length === 0 ? (
+              <div className="empty">아직 기록이 없어요. 첫 번째 주인공이 되어보세요!</div>
+            ) : (
+              <ol>
+                {ranking.map((r) => (
+                  <li key={r.rank} className={auth && r.nickname === auth.nickname ? 'me' : ''}>
+                    <span className={`rank r${r.rank}`}>{r.rank}</span>
+                    <span className="name">{r.nickname}</span>
+                    <span className="pts">{r.score}</span>
+                    <span className="meta">B{r.depth}</span>
+                  </li>
+                ))}
+              </ol>
+            )}
           </div>
 
           <div className="help">

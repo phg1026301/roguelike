@@ -260,3 +260,111 @@ kbd {
   font-size: 11px;
   color: #ddd;
 }
+
+/* 로그인 / 알림 */
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.user {
+  font-size: 14px;
+  color: #ddd;
+}
+.user b { color: #f0c060; }
+
+button.link {
+  margin-left: 8px;
+  background: none;
+  border: none;
+  color: #8a8296;
+  text-decoration: underline;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+button.kakao {
+  padding: 8px 14px;
+  border: none;
+  border-radius: 8px;
+  background: #fee500;
+  color: #191919;
+  font-weight: bold;
+  font-size: 13px;
+  cursor: pointer;
+}
+button.kakao:hover { filter: brightness(0.95); }
+button.kakao:disabled { opacity: 0.6; cursor: wait; }
+
+.notice {
+  margin-bottom: 12px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: #2a2036;
+  border: 2px solid #5b3f7a;
+  color: #f2ecff;
+  font-size: 14px;
+  cursor: pointer;
+}
+.notice span { float: right; color: #8a8296; }
+
+.save-status {
+  min-height: 44px;
+  margin-top: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  color: #a49bb0;
+}
+.save-status .ok { color: #7dd88f; font-weight: bold; }
+.save-status .err { color: #ff8a8a; }
+.overlay .save-status button.kakao {
+  margin: 0;
+  border: none;
+  background: #fee500;
+  color: #191919;
+  font-size: 14px;
+  padding: 10px 16px;
+}
+
+/* 랭킹 */
+.panel-title {
+  font-size: 13px;
+  font-weight: bold;
+  color: #f0c060;
+  margin-bottom: 8px;
+}
+
+.ranking ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.ranking li {
+  display: grid;
+  grid-template-columns: 24px 1fr auto 30px;
+  gap: 8px;
+  align-items: center;
+  padding: 4px 2px;
+  font-size: 13px;
+  border-bottom: 1px solid #22192e;
+}
+.ranking li:last-child { border-bottom: none; }
+.ranking li.me { background: rgba(240, 192, 96, 0.1); border-radius: 4px; }
+
+.ranking .rank {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 10px;
+  color: #8a8296;
+  text-align: center;
+}
+.ranking .r1 { color: #f0c060; }
+.ranking .r2 { color: #d0d4dc; }
+.ranking .r3 { color: #d08a50; }
+.ranking .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ranking .pts { font-family: 'Press Start 2P', monospace; font-size: 10px; color: #eee; }
+.ranking .meta { font-size: 11px; color: #6f6880; text-align: right; }
+.ranking .empty { font-size: 12px; color: #6f6880; }
