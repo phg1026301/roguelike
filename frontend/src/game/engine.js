@@ -4,11 +4,13 @@ import { W, H, generateDungeon, randInt, center } from './dungeon'
 const VIEW_RADIUS = 7
 const POTION_HEAL = 8
 
+// speed: 플레이어가 한 칸 움직일 때 따라올 확률 (1 = 매 턴)
 const MONSTER_TYPES = [
-  { name: '쥐', ch: 'r', hp: 3, atk: 1 },
-  { name: '고블린', ch: 'g', hp: 6, atk: 2 },
-  { name: '오크', ch: 'O', hp: 12, atk: 4 },
+  { name: '쥐', ch: 'r', hp: 3, atk: 1, speed: 1 },
+  { name: '고블린', ch: 'g', hp: 6, atk: 2, speed: 0.75 },
+  { name: '오크', ch: 'O', hp: 12, atk: 4, speed: 0.5 },
 ]
+const CHASE_MEMORY = 4 // 시야에서 놓친 뒤 몇 턴 더 쫓아오는지
 
 let nextId = 1
 
@@ -144,8 +146,12 @@ function monstersAct(state) {
       }
       continue
     }
-    // 플레이어가 보이는 몬스터만 쫓아온다
-    if (!state.visible[m.y][m.x]) continue
+    // 보이면 추적 시작, 놓치면 몇 턴 뒤 포기
+    if (state.visible[m.y][m.x]) m.alert = CHASE_MEMORY
+    else if (m.alert > 0) m.alert -= 1
+    if (!m.alert) continue
+    // 느린 몬스터는 가끔 따라오지 못한다
+    if (Math.random() >= (m.speed ?? 1)) continue
     const tryMoves = Math.abs(dx) > Math.abs(dy)
       ? [[Math.sign(dx), 0], [0, Math.sign(dy)]]
       : [[0, Math.sign(dy)], [Math.sign(dx), 0]]
@@ -162,8 +168,19 @@ function monstersAct(state) {
   }
 }
 
-function endTurn(state) {
+function isAdjacent(a, b) {
+  return Math.abs(a.x - b.x) + Math.abs(a.y - b.y) === 1
+}
+
+function endTurn(prevState, fledFrom = []) {
+  const state = updateFov(prevState) // 몬스터는 플레이어의 '현재' 위치 기준으로 판단
   monstersAct(state)
+  if (!state.over) {
+    for (const id of fledFrom) {
+      const m = state.monsters.find((mm) => mm.id === id)
+      if (m && !isAdjacent(m, state.player)) log(state, `${m.name}에게서 도망쳤다!`)
+    }
+  }
   state.turns += 1
   return updateFov(state)
 }
@@ -194,6 +211,7 @@ export function move(prev, dx, dy) {
 
   if (state.tiles[ny][nx] === '#') return prev // 벽: 턴 소모 없음
 
+  const adjacentBefore = state.monsters.filter((m) => isAdjacent(m, p)).map((m) => m.id)
   p.x = nx
   p.y = ny
 
@@ -215,7 +233,7 @@ export function move(prev, dx, dy) {
     return updateFov(state)
   }
 
-  return endTurn(state)
+  return endTurn(state, adjacentBefore)
 }
 
 export function wait(prev) {

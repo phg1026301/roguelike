@@ -137,6 +137,10 @@ function drawMinimap(ctx, game) {
       px(ctx, ox + x * s, oy + y * s, s, s, t === '>' ? '#f0c060' : game.visible[y][x] ? '#7b8a66' : '#4a5240')
     }
   }
+  // 한 번이라도 본 곳의 포션
+  for (const it of game.items) {
+    if (game.explored[it.y][it.x]) px(ctx, ox + it.x * s, oy + it.y * s, s, s, '#ff7ad0')
+  }
   for (const m of game.monsters) {
     if (game.visible[m.y][m.x]) px(ctx, ox + m.x * s, oy + m.y * s, s, s, '#ff4a4a')
   }
