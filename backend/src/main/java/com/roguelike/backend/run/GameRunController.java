@@ -5,6 +5,7 @@ import com.roguelike.backend.user.User;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import org.springframework.web.bind.annotation.*;
 
@@ -28,16 +29,17 @@ public class GameRunController {
             @Min(0) @Max(9999) int kills,
             @Min(0) @Max(200) Integer bossKills,
             @Min(0) @Max(1000000) int turns,
-            @Size(max = 30) String deathCause) {
+            @Size(max = 30) String deathCause,
+            @Pattern(regexp = "warrior|mage|archer") String cls) {
     }
 
     public record SaveRunResponse(Long id, int score, long rank) {
     }
 
-    public record RankingEntry(long rank, String nickname, int score, int depth, int kills, LocalDateTime createdAt) {
+    public record RankingEntry(long rank, String nickname, int score, int depth, int kills, String cls, LocalDateTime createdAt) {
     }
 
-    public record MyRun(int score, int depth, int kills, int turns, String deathCause, LocalDateTime createdAt) {
+    public record MyRun(int score, int depth, int kills, int turns, String deathCause, String cls, LocalDateTime createdAt) {
     }
 
     // 게임 오버 시 점수 저장 (로그인 필요)
@@ -54,6 +56,7 @@ public class GameRunController {
         int bossKills = Math.min(req.bossKills() == null ? 0 : req.bossKills(), req.depth() / 5);
         run.setBossKills(bossKills);
         run.setDeathCause(req.deathCause());
+        run.setCharacterClass(req.cls());
         // 점수는 서버에서 계산 (조작 방지)
         run.setScore(req.depth() * 100 + req.kills() * 10 + bossKills * 500);
         runs.save(run);
@@ -68,7 +71,7 @@ public class GameRunController {
         return java.util.stream.IntStream.range(0, top.size())
                 .mapToObj(i -> {
                     GameRun r = top.get(i);
-                    return new RankingEntry(i + 1, r.getUser().getNickname(), r.getScore(), r.getDepth(), r.getKills(), r.getCreatedAt());
+                    return new RankingEntry(i + 1, r.getUser().getNickname(), r.getScore(), r.getDepth(), r.getKills(), r.getCharacterClass(), r.getCreatedAt());
                 })
                 .toList();
     }
@@ -78,7 +81,7 @@ public class GameRunController {
     public List<MyRun> myRuns(@RequestHeader(value = "Authorization", required = false) String authorization) {
         User user = auth.requireUser(authorization);
         return runs.findTop20ByUserOrderByCreatedAtDesc(user).stream()
-                .map(r -> new MyRun(r.getScore(), r.getDepth(), r.getKills(), r.getTurns(), r.getDeathCause(), r.getCreatedAt()))
+                .map(r -> new MyRun(r.getScore(), r.getDepth(), r.getKills(), r.getTurns(), r.getDeathCause(), r.getCharacterClass(), r.getCreatedAt()))
                 .toList();
     }
 }

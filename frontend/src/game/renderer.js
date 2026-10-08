@@ -1,11 +1,13 @@
 // 캔버스에 던전을 픽셀아트로 그린다
 import { W, H } from './dungeon'
 import { getSprite } from './sprites'
-import { BASE_VIEW } from './engine'
+import { BASE_VIEW, CLASSES, aimTarget } from './engine'
 
 export const TILE = 16
 export const VIEW_W = 21 // 화면에 보이는 가로 칸 수 (카메라)
 export const VIEW_H = 13
+// 캔버스를 3배 해상도로 그려서 글자가 흐릿하지 않게 한다 (도트 그림은 그대로 선명)
+export const RENDER_SCALE = 3
 
 const MONSTER_SPRITE = { r: 'rat', g: 'goblin', O: 'orc', B: 'boss' }
 
@@ -146,14 +148,57 @@ function drawEntity(ctx, name, tx, ty) {
   ctx.drawImage(sprite, X, Y + 15 - sprite.height)
 }
 
-function drawText(ctx, text, x, y, color, size = 8) {
-  ctx.font = `bold ${size}px monospace`
+function drawText(ctx, text, x, y, color, size = 11) {
+  ctx.font = `900 ${size}px "Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif`
+  ctx.lineJoin = 'round'
   ctx.textAlign = 'center'
-  ctx.lineWidth = 2
+  ctx.lineWidth = Math.max(2.5, size / 4)
   ctx.strokeStyle = '#000'
   ctx.strokeText(text, x, y)
   ctx.fillStyle = color
   ctx.fillText(text, x, y)
+}
+
+const LABEL_FONT = '"Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif'
+
+// 글자 묶음들을 서로 겹치지 않게 위로 밀어 올리며 그린다
+function drawLabels(ctx, labels) {
+  labels.sort((a, b) => a.priority - b.priority)
+  const placed = []
+  for (const label of labels) {
+    let w = 0
+    let h = 0
+    for (const line of label.lines) {
+      ctx.font = `900 ${line.size}px ${LABEL_FONT}`
+      w = Math.max(w, ctx.measureText(line.text).width)
+      h += line.size + 1
+    }
+    const box = { x1: label.x - w / 2 - 2, x2: label.x + w / 2 + 2, y2: label.y, y1: label.y - h - 2 }
+    // 이미 놓인 글자와 겹치면 그 위로 올린다
+    for (let moved = true, guard = 0; moved && guard < 20; guard++) {
+      moved = false
+      for (const o of placed) {
+        if (box.x1 < o.x2 && box.x2 > o.x1 && box.y1 < o.y2 && box.y2 > o.y1) {
+          const lift = box.y2 - o.y1 + 1
+          box.y1 -= lift
+          box.y2 -= lift
+          moved = true
+        }
+      }
+    }
+    placed.push(box)
+    // 읽기 쉽게 반투명 배경
+    ctx.fillStyle = 'rgba(8,4,14,0.55)'
+    ctx.beginPath()
+    ctx.roundRect(box.x1, box.y1, box.x2 - box.x1, box.y2 - box.y1, 3)
+    ctx.fill()
+    let y = box.y1 + 1
+    for (const line of label.lines) {
+      y += line.size
+      drawText(ctx, line.text, label.x, y - 1, line.color, line.size)
+      y += 1
+    }
+  }
 }
 
 function drawMinimap(ctx, game) {
@@ -171,17 +216,19 @@ function drawMinimap(ctx, game) {
       px(ctx, ox + x * s, oy + y * s, s, s, t === '>' ? '#f0c060' : game.visible[y][x] ? '#7b8a66' : '#4a5240')
     }
   }
-  // 한 번이라도 본 곳의 포션
+  // 한 번이라도 본 곳의 포션(분홍), 상자(갈색), 상인(청록)
   for (const it of game.items) {
-    if (game.explored[it.y][it.x]) px(ctx, ox + it.x * s, oy + it.y * s, s, s, '#ff7ad0')
+    if (game.explored[it.y][it.x]) px(ctx, ox + it.x * s, oy + it.y * s, s, s, it.kind === 'chest' ? '#e0a040' : '#ff7ad0')
   }
+  if (game.npc && game.explored[game.npc.y][game.npc.x]) px(ctx, ox + game.npc.x * s - 1, oy + game.npc.y * s - 1, s + 2, s + 2, '#5ff0dc')
   for (const m of game.monsters) {
     if (game.visible[m.y][m.x]) px(ctx, ox + m.x * s, oy + m.y * s, s, s, '#ff4a4a')
   }
   px(ctx, ox + game.player.x * s - 1, oy + game.player.y * s - 1, s + 2, s + 2, '#ffffff')
 }
 
-export function render(ctx, game) {
+export function render(ctx, game, view = {}) {
+  ctx.setTransform(RENDER_SCALE, 0, 0, RENDER_SCALE, 0, 0)
   ctx.imageSmoothingEnabled = false
   px(ctx, 0, 0, VIEW_W * TILE, VIEW_H * TILE, '#07060a')
   const { tiles, visible, explored, player } = game
@@ -189,10 +236,13 @@ export function render(ctx, game) {
   const bossAlive = Boolean(boss)
 
   // 카메라: 플레이어를 화면 가운데에 두되 맵 밖은 안 보이게
-  const camX = Math.max(0, Math.min(W - VIEW_W, player.x - Math.floor(VIEW_W / 2)))
-  const camY = Math.max(0, Math.min(H - VIEW_H, player.y - Math.floor(VIEW_H / 2)))
+  // 이동 중이면 칸 사이 보간 위치(view.player)를 따라가고, 흔들림(view.shake)을 더한다
+  const vp = view.player || player
+  const shake = view.shake || { x: 0, y: 0 }
+  const camX = Math.max(0, Math.min(W - VIEW_W, vp.x - Math.floor(VIEW_W / 2)))
+  const camY = Math.max(0, Math.min(H - VIEW_H, vp.y - Math.floor(VIEW_H / 2)))
   ctx.save()
-  ctx.translate(-camX * TILE, -camY * TILE)
+  ctx.translate(-camX * TILE + shake.x, -camY * TILE + shake.y)
 
   // 1) 지형
   for (let y = 0; y < H; y++) {
@@ -223,42 +273,105 @@ export function render(ctx, game) {
 
   // 3) 아이템, 몬스터, 플레이어
   for (const it of game.items) {
-    if (visible[it.y][it.x]) drawEntity(ctx, 'potion', it.x, it.y)
+    if (visible[it.y][it.x]) drawEntity(ctx, it.kind === 'chest' ? 'chest' : 'potion', it.x, it.y)
+  }
+  if (game.npc && visible[game.npc.y][game.npc.x]) {
+    drawEntity(ctx, 'merchant', game.npc.x, game.npc.y)
+    drawText(ctx, '상점', game.npc.x * TILE + 8, game.npc.y * TILE - 2, '#5ff0dc', 9)
   }
   for (const m of game.monsters) {
     if (!visible[m.y][m.x]) continue
-    if (m.boss) drawBoss(ctx, m.x, m.y)
-    else drawEntity(ctx, MONSTER_SPRITE[m.ch], m.x, m.y)
+    // 몬스터도 이전 칸에서 미끄러져 온다
+    const mv = (view.monsters && view.monsters.get(m.id)) || m
+    if (m.boss) drawBoss(ctx, mv.x, mv.y)
+    else drawEntity(ctx, MONSTER_SPRITE[m.ch], mv.x, mv.y)
     if (!m.boss && m.hp < m.maxHp) {
-      px(ctx, m.x * TILE + 2, m.y * TILE - 1, 12, 2, '#3a0d0d')
-      px(ctx, m.x * TILE + 2, m.y * TILE - 1, Math.max(1, Math.round((12 * m.hp) / m.maxHp)), 2, '#e83b3b')
+      px(ctx, mv.x * TILE + 2, mv.y * TILE - 1, 12, 2, '#3a0d0d')
+      px(ctx, mv.x * TILE + 2, mv.y * TILE - 1, Math.max(1, Math.round((12 * m.hp) / m.maxHp)), 2, '#e83b3b')
     }
   }
-  drawEntity(ctx, 'player', player.x, player.y)
+  // 원거리 직업: 사거리 안 가장 가까운 적 발밑에 조준 표시
+  const aim = !game.over && aimTarget(game)
+  if (aim) {
+    const ax = aim.x * TILE
+    const ay = aim.y * TILE
+    ctx.strokeStyle = 'rgba(255,230,120,0.9)'
+    ctx.lineWidth = 1
+    ctx.beginPath()
+    ctx.ellipse(ax + 8, ay + 14, 7, 3, 0, 0, Math.PI * 2)
+    ctx.stroke()
+    for (const [dx, dy] of [[0, 0], [12, 0], [0, 12], [12, 12]]) {
+      px(ctx, ax + dx + (dx ? 2 : 0), ay + dy + (dy ? 2 : 0), 2, 1, '#ffe678')
+      px(ctx, ax + dx + (dx ? 3 : 0), ay + dy + (dy ? 1 : 0), 1, 2, '#ffe678')
+    }
+  }
+  drawEntity(ctx, (CLASSES[player.cls] || CLASSES.mage).sprite, vp.x, vp.y)
 
   // 4) 플레이어 주변 따뜻한 빛
-  const cx = player.x * TILE + 8
-  const cy = player.y * TILE + 8
+  const cx = vp.x * TILE + 8
+  const cy = vp.y * TILE + 8
   const glow = ctx.createRadialGradient(cx, cy, 4, cx, cy, TILE * 4)
   glow.addColorStop(0, 'rgba(255,200,120,0.16)')
   glow.addColorStop(1, 'rgba(255,200,120,0)')
   ctx.fillStyle = glow
   ctx.fillRect(cx - TILE * 4, cy - TILE * 4, TILE * 8, TILE * 8)
 
-  // 5) 타격 효과와 데미지 숫자
-  const stack = {}
+  // 5) 타격 효과(그림)를 먼저 그리고, 글자는 모아서 겹치지 않게 배치한다
+  const labels = []
+  const addLabel = (fx, lines, priority) => labels.push({ x: fx.x * TILE + 8, y: fx.y * TILE - 1, lines, priority })
   for (const fx of game.fx || []) {
-    const key = `${fx.x},${fx.y}`
-    const n = (stack[key] = (stack[key] || 0) + 1) - 1
     const X = fx.x * TILE + 8
     const Y = fx.y * TILE
-    if (fx.kind === 'hit') {
+    if (fx.kind === 'shot') {
+      // 발사체 궤적: 마법탄(보라 빛) / 화살(갈색 + 화살촉)
+      const sx = fx.from.x * TILE + 8
+      const sy = fx.from.y * TILE + 8
+      const tx = X
+      const ty = Y + 8
+      const steps = Math.max(4, Math.round(Math.hypot(tx - sx, ty - sy) / 3))
+      for (let i = 1; i < steps; i++) {
+        const t = i / steps
+        const cx = sx + (tx - sx) * t
+        const cy = sy + (ty - sy) * t
+        if (fx.cls === 'mage') {
+          ctx.fillStyle = `rgba(185,138,255,${0.25 + 0.6 * t})`
+          ctx.beginPath()
+          ctx.arc(cx, cy, 0.8 + 1.4 * t, 0, Math.PI * 2)
+          ctx.fill()
+        } else {
+          px(ctx, cx - 0.5, cy - 0.5, 1, 1, '#c9a87a')
+        }
+      }
+      if (fx.cls === 'mage') {
+        const g = ctx.createRadialGradient(tx, ty, 0, tx, ty, 6)
+        g.addColorStop(0, 'rgba(255,240,255,0.95)')
+        g.addColorStop(1, 'rgba(185,138,255,0)')
+        ctx.fillStyle = g
+        ctx.fillRect(tx - 6, ty - 6, 12, 12)
+      } else {
+        const ang = Math.atan2(ty - sy, tx - sx)
+        ctx.fillStyle = '#eef2f8'
+        ctx.beginPath()
+        ctx.moveTo(tx, ty)
+        ctx.lineTo(tx - Math.cos(ang - 0.5) * 4, ty - Math.sin(ang - 0.5) * 4)
+        ctx.lineTo(tx - Math.cos(ang + 0.5) * 4, ty - Math.sin(ang + 0.5) * 4)
+        ctx.fill()
+      }
+    } else if (fx.kind === 'blast') {
+      const g = ctx.createRadialGradient(X, Y + 8, 1, X, Y + 8, 14)
+      g.addColorStop(0, 'rgba(240,220,255,0.9)')
+      g.addColorStop(0.5, 'rgba(160,100,255,0.55)')
+      g.addColorStop(1, 'rgba(120,60,220,0)')
+      ctx.fillStyle = g
+      ctx.fillRect(X - 14, Y - 6, 28, 28)
+      if (fx.text) addLabel(fx, [{ text: fx.text, color: '#d9b8ff', size: 12 }], 3)
+    } else if (fx.kind === 'hit') {
       px(ctx, X - 4, Y + 4, 8, 1, '#fff6c0')
       px(ctx, X - 1, Y + 1, 1, 8, '#fff6c0')
-      drawText(ctx, fx.text, X, Y - 2 - n * 8, '#fff6c0')
+      addLabel(fx, [{ text: fx.text, color: '#fff6c0', size: 12 }], 2)
     } else if (fx.kind === 'hurt') {
       px(ctx, fx.x * TILE, Y, TILE, TILE, 'rgba(255,40,40,0.25)')
-      drawText(ctx, fx.text, X, Y - 2 - n * 8, '#ff6b6b')
+      addLabel(fx, [{ text: fx.text, color: '#ff6b6b', size: 12 }], 1)
     } else if (fx.kind === 'crit') {
       // 치명타: 연보라색 큰 숫자 + 반짝임
       px(ctx, X - 6, Y + 4, 12, 1, '#e3c8ff')
@@ -266,14 +379,32 @@ export function render(ctx, game) {
       px(ctx, X - 4, Y + 1, 1, 1, '#ffffff')
       px(ctx, X + 4, Y + 8, 1, 1, '#ffffff')
       px(ctx, X + 5, Y + 1, 1, 1, '#c9a0ff')
-      drawText(ctx, 'CRIT', X, Y - 15 - n * 14, '#d9b8ff', 6)
-      drawText(ctx, fx.text, X, Y - 4 - n * 14, '#c9a0ff', 13)
+      addLabel(fx, [
+        { text: 'CRIT', color: '#e8d4ff', size: 8 },
+        { text: fx.text, color: '#c9a0ff', size: 17 },
+      ], 0)
+    } else if (fx.kind === 'coin') {
+      const color = fx.coin === 'gold' ? '#ffd23c' : fx.coin === 'silver' ? '#e4e8f0' : '#d08a50'
+      ctx.fillStyle = color
+      ctx.beginPath()
+      ctx.arc(X, Y + 8, 3, 0, Math.PI * 2)
+      ctx.fill()
+      addLabel(fx, [{ text: fx.text, color, size: 10 }], 4)
+    } else if (fx.kind === 'fire') {
+      const g = ctx.createRadialGradient(X, Y + 8, 1, X, Y + 8, 10)
+      g.addColorStop(0, 'rgba(255,220,120,0.9)')
+      g.addColorStop(0.5, 'rgba(255,120,40,0.6)')
+      g.addColorStop(1, 'rgba(255,60,20,0)')
+      ctx.fillStyle = g
+      ctx.fillRect(X - 10, Y - 2, 20, 20)
+      if (fx.text) addLabel(fx, [{ text: fx.text, color: '#ffb35c', size: 12 }], 3)
     } else if (fx.kind === 'warn') {
-      drawText(ctx, '!', X, Y - 8, '#ff3b3b', 14)
+      addLabel(fx, [{ text: '!', color: '#ff3b3b', size: 18 }], 0)
     } else if (fx.kind === 'heal') {
-      drawText(ctx, fx.text, X, Y - 2 - n * 8, '#7dff9a')
+      addLabel(fx, [{ text: fx.text, color: '#7dff9a', size: 12 }], 1)
     }
   }
+  drawLabels(ctx, labels)
 
   ctx.restore()
   drawMinimap(ctx, game)
@@ -286,7 +417,7 @@ export function render(ctx, game) {
     px(ctx, bx - 2, by - 2, bw + 4, 10, 'rgba(10,4,14,0.85)')
     px(ctx, bx, by, bw, 6, '#3a0d14')
     px(ctx, bx, by, Math.max(1, Math.round((bw * boss.hp) / boss.maxHp)), 6, boss.windup ? '#ff9a3b' : '#e0263f')
-    drawText(ctx, `👑 ${boss.name}  ${boss.hp}/${boss.maxHp}`, VIEW_W * TILE / 2, by - 5, '#ffd6dc', 7)
+    drawText(ctx, `👑 ${boss.name}  ${boss.hp}/${boss.maxHp}`, VIEW_W * TILE / 2, by - 5, '#ffd6dc', 9)
   }
 
   // 6) 맞은 턴엔 화면 가장자리를 붉게

@@ -10,6 +10,10 @@ const PALETTE = {
   O: '#7f9a43', o: '#5f7630', r: '#ff3030', T: '#fffbe8', M: '#2a1a10', A: '#8a3030', a: '#6a2222', K: '#4a3a2a',
   // 보스
   Z: '#4a3470', z: '#2e2048', X: '#a3a85a', x: '#7d8240', E: '#ffe14a', F: '#ff2d2d',
+  // 전사 / 궁수
+  Q: '#c8323c', U: '#c9ced8', u: '#5d6572', I: '#3b5bb5', J: '#eef2f8', j: '#7a4f28',
+  // 상인
+  N: '#2f9e8f', V: '#1f6e64',
   // 포션
   w: '#d8e4f0', P: '#e04a8a', i: '#ff9cc8', C: '#8a5a2b',
 }
@@ -30,6 +34,38 @@ const SPRITE_DATA = {
     '....BBBBBBBB.s..',
     '....BBBBBBBB.s..',
     '....bBBBBBBb....',
+    '.....kk..kk.....',
+  ],
+  warrior: [
+    '......QQ........',
+    '.....uUUu.......',
+    '....uUUUUu......',
+    '....UueeuU....J.',
+    '....UUUUUU....J.',
+    '.....USSU.....J.',
+    '...QQUUUUQQ...J.',
+    '..IIQUUUUQQ..JJ.',
+    '.IIIIUUUUUQQUJ..',
+    '.IIhIUUUUUQQ.j..',
+    '.IIIIUUUUUU.....',
+    '..IIQQQQQQQ.....',
+    '....UUU.UUU.....',
+    '....kkk.kkk.....',
+  ],
+  archer: [
+    '.......gg.......',
+    '......gggg...C..',
+    '.....gggggg.C.w.',
+    '.....gSSSSg.C..w',
+    '.....SeSSeS.C..w',
+    '......SSSS..C..w',
+    '....gggggggggC.w',
+    '...ggGgggGgg.C.w',
+    '...gGggLLggGgC.w',
+    '...g.ggLLgg..C.w',
+    '.....gggggg.C.w.',
+    '.....Gg..gG..C..',
+    '.....LL..LL.....',
     '.....kk..kk.....',
   ],
   rat: [
@@ -92,6 +128,30 @@ const SPRITE_DATA = {
     '..KKKKK..KKKKK..',
     '..MMMMM..MMMMM..',
   ],
+  chest: [
+    '..KKKKKKKKKKKK..',
+    '.KLLLLLLLLLLLLK.',
+    '.KLllllllllllLK.',
+    '.KKKKKKEEKKKKKK.',
+    '.KLLLLLEELLLLLK.',
+    '.KLLLLLLLLLLLLK.',
+    '.KLllllllllllLK.',
+    '.KKKKKKKKKKKKKK.',
+  ],
+  merchant: [
+    '......NNNN......',
+    '.....NNNNNN.....',
+    '....NNSSSSNN....',
+    '....NSeSSeSN....',
+    '....NSSSSSSN....',
+    '...LNNNNNNNNL...',
+    '..LLNNNYYNNNLL..',
+    '..LLNNNNNNNNLL..',
+    '..LLVNNNNNNVLL..',
+    '....NNNNNNNN....',
+    '....VNNNNNNV....',
+    '....kk....kk....',
+  ],
   potion: [
     '.......CC.......',
     '.......ww.......',
@@ -125,4 +185,11 @@ export function getSprite(name) {
   })
   cache[name] = canvas
   return canvas
+}
+
+// 스프라이트를 이미지 주소로 (직업 선택 카드 초상화 등에 사용)
+const urlCache = {}
+export function spriteUrl(name) {
+  if (!urlCache[name]) urlCache[name] = getSprite(name).toDataURL()
+  return urlCache[name]
 }

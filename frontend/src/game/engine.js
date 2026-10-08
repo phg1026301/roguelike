@@ -1,8 +1,13 @@
-// 게임 규칙: 턴 진행, 전투, 몬스터 AI, 시야, 점수
+// 게임 규칙: 턴 진행, 전투, 몬스터 AI, 시야, 점수, 레벨업, 장비, 코인, 상점
 import { W, H, generateDungeon, randInt, center } from './dungeon'
+import { rollItems, coinTotal, fromTotal, makeShopStock, RARITY, SLOTS } from './items'
 
 export const BASE_VIEW = 7
 const POTION_HEAL = 8
+const BOSS_EVERY = 5 // 몇 층마다 보스가 나오는지
+const BOSS_SCORE = 500
+const CHASE_MEMORY = 4 // 시야에서 놓친 뒤 몇 턴 더 쫓아오는지
+const TRAP_CHANCE = 0.3 // 상자를 부술 때 함정 확률
 
 // speed: 플레이어가 한 칸 움직일 때 따라올 확률 (1 = 매 턴)
 const MONSTER_TYPES = [
@@ -11,8 +16,39 @@ const MONSTER_TYPES = [
   { name: '오크', ch: 'O', hp: 12, atk: 4, speed: 0.5, xp: 12 },
 ]
 
+// ===== 직업 =====
+// range 0 = 근접 전용, range > 0 = F키로 사거리 안 가장 가까운 적에게 자동 발사
+export const CLASSES = {
+  warrior: {
+    name: '전사', icon: '⚔️', sprite: 'warrior', color: '#ff6b6b',
+    hp: 28, atk: 4, def: 1, crit: 0, range: 0,
+    attackDesc: '방향키로 적에게 부딪혀 근접 공격',
+    traitName: '분노', traitDesc: 'HP가 절반 이하일 때 공격력 +2',
+    summary: '튼튼한 몸과 방패로 버티는 근접 전투의 달인',
+  },
+  mage: {
+    name: '마법사', icon: '🔮', sprite: 'player', color: '#b98aff',
+    hp: 16, atk: 4, def: 0, crit: 0, range: 5,
+    attackDesc: '마법탄 발사',
+    traitName: '마나 폭발', traitDesc: '원거리 공격 5번째마다 맞은 적 주변에 폭발 피해',
+    summary: '몸은 약하지만 멀리서 강력한 마법을 퍼붓는다',
+  },
+  archer: {
+    name: '궁수', icon: '🏹', sprite: 'archer', color: '#7dd88f',
+    hp: 20, atk: 3, def: 0, crit: 0.15, range: 6,
+    attackDesc: '화살 발사',
+    traitName: '선제 사격', traitDesc: '아직 다치지 않은 적을 맞히면 2배 피해 · 기본 치명타 15%',
+    summary: '가장 먼 사거리와 날카로운 한 발로 적을 처리한다',
+  },
+}
+export const CLASS_IDS = ['warrior', 'mage', 'archer']
+const MELEE_PENALTY = 0.6 // 원거리 직업이 근접 공격하면 피해 60%
+
+export function isShopFloor(depth) {
+  return depth > 1 && depth % BOSS_EVERY === 1 // 보스를 잡은 다음 층: 6, 11, 16 ...
+}
+
 // ===== 레벨업 보상 카드 =====
-// max: 이 값에 도달하면 더 이상 카드가 나오지 않음
 export const CARDS = {
   hp: { icon: '❤️', name: '강인함', desc: '최대 HP +6', apply: (p) => { p.maxHp += 6; p.hp += 6 } },
   atk: { icon: '⚔️', name: '날카로운 칼날', desc: '공격력 +1', apply: (p) => { p.atk += 1 } },
@@ -48,7 +84,11 @@ function gainXp(state, amount) {
     state.pendingLevelUps += 1
     log(state, `레벨 업! Lv.${p.level} — 보상을 하나 고르자.`)
   }
-  if (state.pendingLevelUps > 0 && !state.levelUp) state.levelUp = { cards: drawCards(p) }
+  openLevelUpIfPending(state)
+}
+
+function openLevelUpIfPending(state) {
+  if (state.pendingLevelUps > 0 && !state.levelUp) state.levelUp = { cards: drawCards(state.player) }
 }
 
 // 레벨업 카드 선택 (index: 0~2)
@@ -65,9 +105,50 @@ export function chooseCard(prev, index) {
   state.levelUp = state.pendingLevelUps > 0 ? { cards: drawCards(p) } : null
   return updateFov(state)
 }
-const BOSS_EVERY = 5 // 몇 층마다 보스가 나오는지
-const BOSS_SCORE = 500
-const CHASE_MEMORY = 4 // 시야에서 놓친 뒤 몇 턴 더 쫓아오는지
+
+// ===== 장비 =====
+function applyItem(p, item, sign) {
+  p.atk += sign * (item.atk || 0)
+  p.def += sign * (item.def || 0)
+  p.maxHp += sign * (item.maxHp || 0)
+  p.crit += sign * (item.crit || 0)
+  p.agility += sign * (item.agility || 0)
+}
+
+function equip(state, item) {
+  const p = state.player
+  const old = p.equip[item.slot]
+  if (old) applyItem(p, old, -1)
+  applyItem(p, item, 1)
+  if (item.maxHp) p.hp += item.maxHp
+  p.hp = Math.max(1, Math.min(p.hp, p.maxHp))
+  p.equip[item.slot] = item
+  const tag = item.rarity === 'hidden' ? '✨ 히든 장비! ' : ''
+  log(state, `${tag}[${RARITY[item.rarity].name}] ${item.name}(${SLOTS[item.slot]}) 장착${old ? ` — [${RARITY[old.rarity].name}] ${old.name} 교체` : ''}`)
+}
+
+function hasSpecial(p, special) {
+  return Object.values(p.equip).some((it) => it && it.special === special)
+}
+
+// ===== 코인 =====
+function dropCoins(state, m) {
+  const p = state.player
+  let coin
+  if (m.boss) coin = { gold: randInt(5, 8) }
+  else if (m.ch === 'O') coin = { gold: 1, silver: randInt(0, 4) }
+  else if (m.ch === 'g') coin = { silver: randInt(1, 2) }
+  else coin = { bronze: randInt(1, 3) + Math.floor(state.depth / 2) }
+  const mult = hasSpecial(p, 'luck') ? 2 : 1
+  const labels = []
+  for (const [type, label] of [['gold', '금화'], ['silver', '은화'], ['bronze', '동화']]) {
+    const n = (coin[type] || 0) * mult
+    if (!n) continue
+    p.coins[type] += n
+    labels.push(`+${n} ${label}`)
+  }
+  if (labels.length) state.fx.push({ x: m.x, y: m.y, kind: 'coin', text: labels[0], coin: Object.keys(coin)[0] })
+}
 
 let nextId = 1
 
@@ -84,6 +165,10 @@ function randomFloorIn(room, taken) {
   return null
 }
 
+function inRoom(pos, r) {
+  return pos.x >= r.x && pos.x < r.x + r.w && pos.y >= r.y && pos.y < r.y + r.h
+}
+
 function buildFloor(depth, player) {
   const { tiles, rooms } = generateDungeon()
   const start = center(rooms[0])
@@ -91,9 +176,8 @@ function buildFloor(depth, player) {
   tiles[stairs.y][stairs.x] = '>'
 
   const taken = new Set([`${start.x},${start.y}`, `${stairs.x},${stairs.y}`])
-  const monsters = []
+  let monsters = []
   const items = []
-  // 깊이 내려갈수록 강한 몬스터가 나올 수 있다
   const maxType = Math.min(MONSTER_TYPES.length - 1, Math.floor((depth + 1) / 2))
 
   rooms.slice(1).forEach((room) => {
@@ -111,14 +195,35 @@ function buildFloor(depth, player) {
     }
   })
 
+  // 보물상자: 시작/계단 방을 뺀 방에 가끔, 층당 최대 2개
+  let chests = 0
+  for (const room of rooms.slice(1, -1)) {
+    if (chests >= 2 || Math.random() >= 0.25) continue
+    const pos = randomFloorIn(room, taken)
+    if (pos) {
+      items.push({ id: nextId++, kind: 'chest', ...pos })
+      chests += 1
+    }
+  }
+
+  // 상점 층: 상인이 있는 방은 몬스터가 없는 안전지대
+  let npc = null
+  if (isShopFloor(depth) && rooms.length > 2) {
+    const room = rooms[1]
+    const pos = center(room)
+    monsters = monsters.filter((m) => !inRoom(m, room))
+    const blocked = items.findIndex((it) => it.x === pos.x && it.y === pos.y)
+    if (blocked >= 0) items.splice(blocked, 1)
+    npc = { ...pos, stock: makeShopStock() }
+  }
+
   // 보스 층: 계단 바로 옆에서 계단을 지킨다
   if (depth % BOSS_EVERY === 0) {
     const spots = [[-1, 0], [1, 0], [0, -1], [0, 1]]
       .map(([dx, dy]) => ({ x: stairs.x + dx, y: stairs.y + dy }))
       .filter((pos) => tiles[pos.y][pos.x] !== '#')
     const pos = spots[0] || stairs
-    const occupied = monsters.findIndex((m) => m.x === pos.x && m.y === pos.y)
-    if (occupied >= 0) monsters.splice(occupied, 1)
+    monsters = monsters.filter((m) => !(m.x === pos.x && m.y === pos.y))
     const hp = 34 + depth * 6
     monsters.push({
       id: nextId++, name: '오우거 군주', ch: 'B', boss: true, ...pos,
@@ -128,13 +233,17 @@ function buildFloor(depth, player) {
   }
 
   const explored = Array.from({ length: H }, () => Array(W).fill(false))
-  return { tiles, monsters, items, explored, player: { ...player, ...start } }
+  return { tiles, monsters, items, npc, explored, player: { ...player, ...start } }
 }
 
-export function newGame() {
+export function newGame(cls = 'mage', { picking = false } = {}) {
+  const c = CLASSES[cls] || CLASSES.mage
   const player = {
-    x: 0, y: 0, hp: 20, maxHp: 20, atk: 3, potions: 1,
-    level: 1, xp: 0, def: 0, regen: 0, lifesteal: 0, crit: 0, agility: 0, vision: 0, perks: {},
+    x: 0, y: 0, hp: c.hp, maxHp: c.hp, atk: c.atk, potions: 1,
+    cls, range: c.range, shots: 0,
+    level: 1, xp: 0, def: c.def, regen: 0, lifesteal: 0, crit: c.crit, agility: 0, vision: 0, perks: {},
+    equip: { weapon: null, armor: null, trinket: null },
+    coins: { gold: 0, silver: 0, bronze: 0 },
   }
   const state = {
     depth: 1,
@@ -145,9 +254,15 @@ export function newGame() {
     fx: [],
     hurtTurn: -1,
     levelUp: null,
-    bossKills: 0,
     pendingLevelUps: 0,
-    messages: ['던전에 들어왔다. 계단(>)을 찾아 내려가자!'],
+    bossKills: 0,
+    chest: null, // { stage: 'choose' | 'loot', itemId, loot }
+    shopOpen: false,
+    picking,
+    messages: [
+      `${c.icon} ${c.name}(으)로 던전에 들어왔다. 계단(>)을 찾아 내려가자!`,
+      ...(c.range ? [`F키: 사거리 ${c.range}칸 안의 가장 가까운 적에게 ${c.attackDesc}`] : []),
+    ],
     ...buildFloor(1, player),
   }
   return updateFov(state)
@@ -155,6 +270,28 @@ export function newGame() {
 
 export function score(state) {
   return state.depth * 100 + state.kills * 10 + (state.bossKills || 0) * BOSS_SCORE
+}
+
+// 선택 창이 떠 있으면 턴이 진행되지 않는다
+function blocked(state) {
+  return state.over || state.levelUp || state.chest || state.shopOpen || state.picking
+}
+
+// 원거리 직업: 사거리 안에서 보이는 가장 가까운 적
+export function aimTarget(state) {
+  const p = state.player
+  if (!p.range) return null
+  let best = null
+  let bestD = Infinity
+  for (const m of state.monsters) {
+    if (m.dead || !state.visible[m.y][m.x]) continue
+    const d = Math.hypot(m.x - p.x, m.y - p.y)
+    if (d <= p.range + 0.01 && d < bestD) {
+      best = m
+      bestD = d
+    }
+  }
+  return best
 }
 
 function log(state, msg) {
@@ -187,12 +324,12 @@ function lineOfSight(tiles, x0, y0, x1, y1) {
 
 function updateFov(state) {
   const { x: px, y: py } = state.player
-  const VIEW_RADIUS = BASE_VIEW + (state.player.vision || 0)
+  const radius = BASE_VIEW + (state.player.vision || 0)
   const visible = Array.from({ length: H }, () => Array(W).fill(false))
   const explored = state.explored.map((row) => [...row])
-  for (let y = Math.max(0, py - VIEW_RADIUS); y <= Math.min(H - 1, py + VIEW_RADIUS); y++) {
-    for (let x = Math.max(0, px - VIEW_RADIUS); x <= Math.min(W - 1, px + VIEW_RADIUS); x++) {
-      if ((x - px) ** 2 + (y - py) ** 2 > VIEW_RADIUS ** 2) continue
+  for (let y = Math.max(0, py - radius); y <= Math.min(H - 1, py + radius); y++) {
+    for (let x = Math.max(0, px - radius); x <= Math.min(W - 1, px + radius); x++) {
+      if ((x - px) ** 2 + (y - py) ** 2 > radius ** 2) continue
       if (lineOfSight(state.tiles, px, py, x, y)) {
         visible[y][x] = true
         explored[y][x] = true
@@ -203,13 +340,68 @@ function updateFov(state) {
 }
 
 function monsterAt(state, x, y) {
-  return state.monsters.find((m) => m.x === x && m.y === y)
+  return state.monsters.find((m) => m.x === x && m.y === y && !m.dead)
+}
+
+function npcAt(state, x, y) {
+  return state.npc && state.npc.x === x && state.npc.y === y
+}
+
+function isAdjacent(a, b) {
+  return Math.abs(a.x - b.x) + Math.abs(a.y - b.y) === 1
+}
+
+function hurtPlayer(state, m, dmg, text) {
+  const p = state.player
+  p.hp -= dmg
+  state.fx.push({ x: p.x, y: p.y, kind: 'hurt', text: `-${dmg}` })
+  state.hurtTurn = state.turns + 1
+  log(state, text)
+  if (p.hp <= 0) {
+    p.hp = 0
+    state.over = true
+    state.deathCause = m.name
+    log(state, `${m.name}에게 쓰러졌다...`)
+    return
+  }
+  // 가시 갑옷: 반사 피해
+  if (hasSpecial(p, 'thorns') && !m.dead) {
+    m.hp -= 2
+    state.fx.push({ x: m.x, y: m.y, kind: 'hit', text: '2' })
+    if (m.hp <= 0) killMonster(state, m)
+  }
+}
+
+// 몬스터 처치: 경험치, 코인, 보스 보상, 흡혈
+function killMonster(state, m) {
+  const p = state.player
+  m.dead = true
+  state.monsters = state.monsters.filter((mm) => mm.id !== m.id)
+  state.kills += 1
+  log(state, `${m.name}을(를) 처치했다! (+${m.xp} XP)`)
+  dropCoins(state, m)
+  if (m.boss) {
+    state.bossKills += 1
+    p.hp = p.maxHp
+    p.potions += 2
+    state.fx.push({ x: p.x, y: p.y, kind: 'heal', text: 'FULL' })
+    log(state, `👑 보스 처치! HP 전체 회복, 포션 +2, 점수 +${BOSS_SCORE}. 계단의 봉인이 풀렸다!`)
+  }
+  if (p.lifesteal > 0) {
+    const healed = Math.min(p.lifesteal, p.maxHp - p.hp)
+    if (healed > 0) {
+      p.hp += healed
+      state.fx.push({ x: p.x, y: p.y, kind: 'heal', text: `+${healed}` })
+    }
+  }
+  gainXp(state, m.xp)
 }
 
 function monstersAct(state) {
   const p = state.player
-  for (const m of state.monsters) {
+  for (const m of [...state.monsters]) {
     if (state.over) break
+    if (m.dead) continue
     const dx = p.x - m.x
     const dy = p.y - m.y
     const adjacent = Math.abs(dx) + Math.abs(dy) === 1
@@ -219,16 +411,7 @@ function monstersAct(state) {
       m.cooldown = 3
       if (adjacent) {
         const dmg = Math.max(2, m.atk * 2 - p.def)
-        p.hp -= dmg
-        state.fx.push({ x: p.x, y: p.y, kind: 'hurt', text: `-${dmg}` })
-        state.hurtTurn = state.turns + 1
-        log(state, `💥 ${m.name}의 내려치기! ${dmg} 피해!`)
-        if (p.hp <= 0) {
-          p.hp = 0
-          state.over = true
-          state.deathCause = m.name
-          log(state, `${m.name}에게 쓰러졌다...`)
-        }
+        hurtPlayer(state, m, dmg, `💥 ${m.name}의 내려치기! ${dmg} 피해!`)
       } else {
         log(state, `${m.name}의 내려치기가 빗나갔다!`)
       }
@@ -243,16 +426,7 @@ function monstersAct(state) {
     if (m.boss && m.cooldown > 0) m.cooldown -= 1
     if (adjacent) {
       const dmg = Math.max(1, randInt(Math.max(1, m.atk - 1), m.atk) - p.def)
-      p.hp -= dmg
-      state.fx.push({ x: p.x, y: p.y, kind: 'hurt', text: `-${dmg}` })
-      state.hurtTurn = state.turns + 1
-      log(state, `${m.name}에게 ${dmg} 피해를 입었다.`)
-      if (p.hp <= 0) {
-        p.hp = 0
-        state.over = true
-        state.deathCause = m.name
-        log(state, `${m.name}에게 쓰러졌다...`)
-      }
+      hurtPlayer(state, m, dmg, `${m.name}에게 ${dmg} 피해를 입었다.`)
       continue
     }
     // 보이면 추적 시작, 놓치면 몇 턴 뒤 포기
@@ -260,7 +434,7 @@ function monstersAct(state) {
     else if (m.alert > 0) m.alert -= 1
     if (!m.alert) continue
     // 느린 몬스터는 가끔 따라오지 못한다
-    if (Math.random() >= (m.speed ?? 1) * (1 - p.agility)) continue
+    if (Math.random() >= (m.speed ?? 1) * (1 - Math.min(0.8, p.agility))) continue
     const tryMoves = Math.abs(dx) > Math.abs(dy)
       ? [[Math.sign(dx), 0], [0, Math.sign(dy)]]
       : [[0, Math.sign(dy)], [Math.sign(dx), 0]]
@@ -268,7 +442,7 @@ function monstersAct(state) {
       if (mx === 0 && my === 0) continue
       const nx = m.x + mx
       const ny = m.y + my
-      if (state.tiles[ny][nx] === '#' || monsterAt(state, nx, ny)) continue
+      if (state.tiles[ny][nx] === '#' || monsterAt(state, nx, ny) || npcAt(state, nx, ny)) continue
       if (nx === p.x && ny === p.y) continue
       m.x = nx
       m.y = ny
@@ -285,7 +459,7 @@ function summonMinions(state, boss) {
     if (count >= 2) break
     const x = boss.x + dx
     const y = boss.y + dy
-    if (state.tiles[y][x] === '#' || monsterAt(state, x, y)) continue
+    if (state.tiles[y][x] === '#' || monsterAt(state, x, y) || npcAt(state, x, y)) continue
     if (x === state.player.x && y === state.player.y) continue
     const t = MONSTER_TYPES[1]
     const hp = t.hp + state.depth - 1
@@ -293,10 +467,6 @@ function summonMinions(state, boss) {
     count += 1
   }
   if (count > 0) log(state, `${boss.name}가 부하를 불렀다!`)
-}
-
-function isAdjacent(a, b) {
-  return Math.abs(a.x - b.x) + Math.abs(a.y - b.y) === 1
 }
 
 function endTurn(prevState, fledFrom = []) {
@@ -316,48 +486,79 @@ function endTurn(prevState, fledFrom = []) {
   return updateFov(state)
 }
 
+function attack(state, target, ranged = false) {
+  const p = state.player
+  let atk = p.atk
+  if (p.cls === 'warrior' && p.hp <= p.maxHp / 2) atk += 2 // 분노
+  let dmg = randInt(Math.max(1, atk - 1), atk + 1)
+  if (p.range && !ranged) dmg = Math.max(1, Math.round(dmg * MELEE_PENALTY))
+  if (p.cls === 'archer' && ranged && target.hp === target.maxHp) {
+    dmg *= 2
+    log(state, '🎯 선제 사격! 2배 피해')
+  }
+  const isCrit = Math.random() < p.crit
+  if (isCrit) dmg *= 2
+  target.hp -= dmg
+  state.fx.push({ x: target.x, y: target.y, kind: isCrit ? 'crit' : 'hit', text: `${dmg}` })
+  if (isCrit) log(state, '💜 치명타!')
+  // 마법사 마나 폭발: 원거리 공격 5번째마다
+  if (p.cls === 'mage' && ranged) {
+    p.shots += 1
+    if (p.shots % 5 === 0) {
+      const blast = Math.ceil(p.atk / 2) + 1
+      const around = state.monsters.filter((m) => m !== target && !m.dead && Math.abs(m.x - target.x) <= 1 && Math.abs(m.y - target.y) <= 1)
+      state.fx.push({ x: target.x, y: target.y, kind: 'blast', text: '' })
+      log(state, `💥 마나 폭발!${around.length ? ` 주변 적 ${around.length}마리에게 ${blast} 피해` : ''}`)
+      for (const m of around) {
+        m.hp -= blast
+        state.fx.push({ x: m.x, y: m.y, kind: 'blast', text: `${blast}` })
+        if (m.hp <= 0) killMonster(state, m)
+      }
+    }
+  }
+  if (hasSpecial(p, 'vamp') && p.hp < p.maxHp) p.hp += 1
+  if (target.boss && target.hp > 0 && !target.summoned && target.hp <= target.maxHp / 2) {
+    target.summoned = true
+    summonMinions(state, target)
+  }
+  // 불꽃검: 대상 주변 적에게 화염 피해
+  if (hasSpecial(p, 'fire') && Math.random() < 0.25) {
+    const burn = Math.ceil(p.atk / 2) + 1
+    const around = state.monsters.filter((m) => m !== target && !m.dead && Math.abs(m.x - target.x) <= 1 && Math.abs(m.y - target.y) <= 1)
+    state.fx.push({ x: target.x, y: target.y, kind: 'fire', text: '' })
+    log(state, `🔥 불꽃이 터졌다!${around.length ? ` 주변 적 ${around.length}마리에게 ${burn} 피해` : ''}`)
+    for (const m of around) {
+      m.hp -= burn
+      state.fx.push({ x: m.x, y: m.y, kind: 'fire', text: `${burn}` })
+      if (m.hp <= 0) killMonster(state, m)
+    }
+  }
+  if (target.hp <= 0) killMonster(state, target)
+  else log(state, `${target.name}에게 ${dmg} 피해를 주었다.`)
+}
+
 // 방향키 한 번 = 한 턴
 export function move(prev, dx, dy) {
-  if (prev.over || prev.levelUp) return prev
+  if (blocked(prev)) return prev
+  const p0 = prev.player
+  const nx = p0.x + dx
+  const ny = p0.y + dy
+
+  // 상인에게 부딪히면 상점 열기 (턴 소모 없음)
+  if (npcAt(prev, nx, ny)) {
+    const state = structuredClone(prev)
+    state.fx = []
+    state.shopOpen = true
+    return state
+  }
+
   const state = structuredClone(prev)
   state.fx = []
   const p = state.player
-  const nx = p.x + dx
-  const ny = p.y + dy
 
   const target = monsterAt(state, nx, ny)
   if (target) {
-    const isCrit = Math.random() < p.crit
-    const dmg = randInt(Math.max(1, p.atk - 1), p.atk + 1) * (isCrit ? 2 : 1)
-    target.hp -= dmg
-    state.fx.push({ x: target.x, y: target.y, kind: isCrit ? 'crit' : 'hit', text: `${dmg}` })
-    if (isCrit) log(state, '💜 치명타!')
-    if (target.boss && target.hp > 0 && !target.summoned && target.hp <= target.maxHp / 2) {
-      target.summoned = true
-      summonMinions(state, target)
-    }
-    if (target.hp <= 0) {
-      state.monsters = state.monsters.filter((m) => m.id !== target.id)
-      state.kills += 1
-      log(state, `${target.name}을(를) 처치했다! (+${target.xp} XP)`)
-      if (target.boss) {
-        state.bossKills += 1
-        p.hp = p.maxHp
-        p.potions += 2
-        state.fx.push({ x: p.x, y: p.y, kind: 'heal', text: 'FULL' })
-        log(state, `👑 보스 처치! HP 전체 회복, 포션 +2, 점수 +${BOSS_SCORE}. 계단의 봉인이 풀렸다!`)
-      }
-      if (p.lifesteal > 0) {
-        const healed = Math.min(p.lifesteal, p.maxHp - p.hp)
-        if (healed > 0) {
-          p.hp += healed
-          state.fx.push({ x: p.x, y: p.y, kind: 'heal', text: `+${healed}` })
-        }
-      }
-      gainXp(state, target.xp)
-    } else {
-      log(state, `${target.name}에게 ${dmg} 피해를 주었다.`)
-    }
+    attack(state, target)
     return endTurn(state)
   }
 
@@ -368,10 +569,14 @@ export function move(prev, dx, dy) {
   p.y = ny
 
   const item = state.items.find((it) => it.x === nx && it.y === ny)
-  if (item) {
+  if (item && item.kind === 'potion') {
     state.items = state.items.filter((it) => it.id !== item.id)
     p.potions += 1
     log(state, '회복 포션을 주웠다. (Q로 마시기)')
+  } else if (item && item.kind === 'chest') {
+    state.chest = { stage: 'choose', itemId: item.id, loot: [] }
+    log(state, '📦 보물상자를 발견했다!')
+    return updateFov(state)
   }
 
   if (state.tiles[ny][nx] === '>' && state.monsters.some((m) => m.boss)) {
@@ -384,6 +589,7 @@ export function move(prev, dx, dy) {
     Object.assign(state, buildFloor(state.depth, p))
     log(state, `지하 ${state.depth}층으로 내려왔다. 조금 더 강해진 느낌이다.`)
     if (state.depth % BOSS_EVERY === 0) log(state, '⚠ 강력한 보스의 기운이 느껴진다... 계단을 지키고 있다!')
+    if (state.npc) log(state, '🛒 어딘가에서 상인의 목소리가 들린다. 상인에게 다가가면 거래할 수 있다.')
     state.turns += 1
     return updateFov(state)
   }
@@ -391,15 +597,35 @@ export function move(prev, dx, dy) {
   return endTurn(state, adjacentBefore)
 }
 
+// F키: 원거리 공격
+export function fire(prev) {
+  if (blocked(prev)) return prev
+  if (!prev.player.range) {
+    const state = structuredClone(prev)
+    log(state, '전사는 방향키로 적에게 부딪혀 공격한다.')
+    return state
+  }
+  const state = structuredClone(prev)
+  state.fx = []
+  const target = aimTarget(state)
+  if (!target) {
+    log(state, `사거리 안에 적이 없다. (사거리 ${state.player.range}칸)`)
+    return state
+  }
+  state.fx.push({ kind: 'shot', x: target.x, y: target.y, from: { x: state.player.x, y: state.player.y }, cls: state.player.cls })
+  attack(state, target, true)
+  return endTurn(state)
+}
+
 export function wait(prev) {
-  if (prev.over || prev.levelUp) return prev
+  if (blocked(prev)) return prev
   const state = structuredClone(prev)
   state.fx = []
   return endTurn(state)
 }
 
 export function drinkPotion(prev) {
-  if (prev.over || prev.levelUp) return prev
+  if (blocked(prev)) return prev
   if (prev.player.potions <= 0) {
     const state = structuredClone(prev)
     log(state, '포션이 없다.')
@@ -414,4 +640,98 @@ export function drinkPotion(prev) {
   state.fx.push({ x: p.x, y: p.y, kind: 'heal', text: `+${healed}` })
   log(state, `포션을 마셨다. HP +${healed}`)
   return endTurn(state)
+}
+
+// ===== 보물상자 =====
+// stage 'choose': 0 조심스럽게 연다 / 1 힘으로 부순다 / 2 그냥 둔다
+// stage 'loot':   0~2 장비 선택 / 3 아무것도 가져가지 않음
+export function chestChoose(prev, index) {
+  if (!prev.chest || prev.over || prev.levelUp) return prev
+  const state = structuredClone(prev)
+  state.fx = []
+  const p = state.player
+  const chest = state.chest
+
+  if (chest.stage === 'choose') {
+    if (index === 2) {
+      state.chest = null
+      log(state, '상자를 그냥 두었다.')
+      return state
+    }
+    if (index !== 0 && index !== 1) return prev
+    state.items = state.items.filter((it) => it.id !== chest.itemId)
+    if (index === 1 && Math.random() < TRAP_CHANCE) {
+      const dmg = 2 + state.depth
+      p.hp -= dmg
+      state.fx.push({ x: p.x, y: p.y, kind: 'hurt', text: `-${dmg}` })
+      state.hurtTurn = state.turns
+      log(state, `💣 함정이었다! ${dmg} 피해!`)
+      if (p.hp <= 0) {
+        p.hp = 0
+        state.over = true
+        state.deathCause = '상자 함정'
+        state.chest = null
+        return state
+      }
+    }
+    chest.loot = rollItems(3, index === 1 ? 'smash' : 'careful')
+    chest.stage = 'loot'
+    log(state, index === 1 ? '상자를 힘으로 부쉈다!' : '상자를 조심스럽게 열었다.')
+    return state
+  }
+
+  if (chest.stage === 'loot') {
+    if (index === 3) {
+      p.coins.bronze += 5
+      log(state, '장비 대신 동화 5개를 챙겼다.')
+    } else {
+      const item = chest.loot[index]
+      if (!item) return prev
+      equip(state, item)
+    }
+    state.chest = null
+    return state
+  }
+  return prev
+}
+
+// ===== 상점 =====
+export function shopBuy(prev, index) {
+  if (!prev.shopOpen || !prev.npc || prev.over) return prev
+  const entry = prev.npc.stock[index]
+  if (!entry) return prev
+  const state = structuredClone(prev)
+  const p = state.player
+  const stock = state.npc.stock[index]
+  if (stock.sold) {
+    log(state, '이미 판매된 물건이다.')
+    return state
+  }
+  const total = coinTotal(p.coins)
+  if (total < stock.price) {
+    log(state, `코인이 부족하다. (${stock.name})`)
+    return state
+  }
+  p.coins = fromTotal(total - stock.price)
+  stock.sold = true
+  if (stock.kind === 'potion') {
+    p.potions += 1
+    log(state, '🧪 회복 포션을 샀다.')
+  } else if (stock.kind === 'maxhp') {
+    p.maxHp += 5
+    p.hp += 5
+    log(state, '❤️ 생명의 정수를 마셨다. 최대 HP +5')
+  } else if (stock.kind === 'card') {
+    state.pendingLevelUps += 1
+    openLevelUpIfPending(state)
+    log(state, '🃏 수련서를 읽었다. 보상을 하나 고르자.')
+  } else if (stock.kind === 'item') {
+    equip(state, stock.item)
+  }
+  return state
+}
+
+export function shopClose(prev) {
+  if (!prev.shopOpen) return prev
+  return { ...prev, shopOpen: false }
 }

@@ -35,6 +35,10 @@ public class GameRun {
     @Column(length = 30)
     private String deathCause;
 
+    // 직업: warrior / mage / archer
+    @Column(length = 20)
+    private String characterClass;
+
     @Column(nullable = false)
     private LocalDateTime createdAt = LocalDateTime.now();
 }

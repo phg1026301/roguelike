@@ -52,5 +52,5 @@ export const api = {
 }
 
 export function runFromGame(game) {
-  return { depth: game.depth, kills: game.kills, bossKills: game.bossKills || 0, turns: game.turns, deathCause: game.deathCause }
+  return { depth: game.depth, kills: game.kills, bossKills: game.bossKills || 0, cls: game.player.cls, turns: game.turns, deathCause: game.deathCause }
 }

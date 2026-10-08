@@ -505,3 +505,315 @@ button.kakao:disabled { opacity: 0.6; cursor: wait; }
   color: #7fd3ff;
   font-size: 12px;
 }
+
+/* 코인 / 장비 */
+.coins {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: 'Press Start 2P', monospace;
+  font-size: 11px;
+}
+.coins b { margin-right: 10px; color: #eee; }
+.coin {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid rgba(0, 0, 0, 0.4);
+}
+.coin.gold { background: radial-gradient(circle at 35% 35%, #fff2a8, #ffc93c 55%, #b8860b); }
+.coin.silver { background: radial-gradient(circle at 35% 35%, #ffffff, #c9ced8 55%, #7d8494); }
+.coin.bronze { background: radial-gradient(circle at 35% 35%, #ffd2a8, #d08a50 55%, #8a5228); }
+
+.equip {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+.equip-slot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 4px;
+  background: #1b1424;
+  border: 2px solid #4a3266;
+  border-radius: 8px;
+  cursor: help;
+  min-width: 0;
+}
+.equip-slot.empty { opacity: 0.55; }
+.equip-icon { font-size: 20px; line-height: 1.2; }
+.equip-label {
+  font-size: 10px;
+  color: #c9c0d8;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 등급 색 */
+.r-common { border-color: #8d8d96 !important; }
+.r-rare { border-color: #5aa8ff !important; }
+.r-epic { border-color: #c27bff !important; }
+.r-hidden {
+  border-color: #ffc93c !important;
+  box-shadow: 0 0 12px rgba(255, 201, 60, 0.45);
+}
+.r-common .rarity-tag { color: #d8d8d8; }
+.r-rare .rarity-tag { color: #5aa8ff; }
+.r-epic .rarity-tag { color: #c27bff; }
+.r-hidden .rarity-tag { color: #ffc93c; }
+.rarity-tag { font-size: 11px; font-weight: bold; }
+
+.overlay.chest h2 { color: #f0c060; text-shadow: 4px 4px 0 #3a2a10; }
+.overlay .card.danger:hover { border-color: #ff6b6b; }
+.overlay .item-card { min-height: 220px; }
+
+.overlay .close-btn {
+  margin-top: 16px;
+  padding: 8px 16px;
+  font-size: 13px;
+  background: #2a2036;
+  border: 2px solid #5b3f7a;
+  color: #c9c0d8;
+}
+
+/* 상점 */
+.overlay.shop { overflow-y: auto; padding: 16px 0; justify-content: flex-start; }
+.overlay.shop h2 { color: #5ff0dc; text-shadow: 4px 4px 0 #0f3a35; margin-top: 8px; }
+.shop-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 300px));
+  gap: 10px;
+  margin-top: 12px;
+  padding: 0 12px;
+}
+.overlay .shop-item {
+  position: relative;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px 10px 26px;
+  text-align: left;
+  background: #1b1424;
+  border: 2px solid #4a3266;
+  border-radius: 10px;
+  color: #f2ecff;
+  font-size: 13px;
+}
+.overlay .shop-item:hover:not(:disabled) { border-color: #5ff0dc; background: #22192e; }
+.overlay .shop-item.sold { opacity: 0.4; cursor: default; }
+.shop-icon { font-size: 26px; }
+.shop-text { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.shop-text b { color: #f0c060; font-size: 13px; }
+.shop-text .card-desc { font-size: 11px; }
+.price {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 9px;
+  color: #ffd23c;
+  white-space: nowrap;
+}
+.price.poor { color: #ff7a7a; }
+
+@media (max-width: 700px) {
+  .shop-grid { grid-template-columns: 1fr; }
+}
+
+/* 픽셀 장비 아이콘 */
+.pixel-icon {
+  image-rendering: pixelated;
+  display: block;
+}
+
+.item-icon-frame {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  height: 64px;
+  border-radius: 10px;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.08), rgba(0, 0, 0, 0.25));
+}
+.r-hidden .item-icon-frame { background: radial-gradient(circle, rgba(255, 201, 60, 0.3), rgba(0, 0, 0, 0.2)); }
+.r-epic .item-icon-frame { background: radial-gradient(circle, rgba(194, 123, 255, 0.22), rgba(0, 0, 0, 0.2)); }
+.r-rare .item-icon-frame { background: radial-gradient(circle, rgba(90, 168, 255, 0.2), rgba(0, 0, 0, 0.2)); }
+
+.equip-icon { display: flex; align-items: center; justify-content: center; height: 30px; }
+
+/* 현재 장착 중인 장비 + 등급 */
+.current-equip {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 4px 6px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.3);
+  font-size: 11px;
+  color: #c9c0d8;
+}
+.current-equip.empty { color: #7fd3ff; }
+.current-equip.small { margin-top: 2px; justify-content: flex-start; padding: 2px 4px; }
+.current-label { color: #8a8296; }
+.current-name { color: #f2ecff; }
+
+.rarity-badge {
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: bold;
+  color: #15101c;
+}
+.rb-common { background: #c8c8d0; }
+.rb-rare { background: #5aa8ff; }
+.rb-epic { background: #c27bff; }
+.rb-hidden { background: linear-gradient(90deg, #ffe58a, #ffc93c); box-shadow: 0 0 6px rgba(255, 201, 60, 0.7); }
+
+/* 서버 깨우는 중 안내 */
+.wake-hint {
+  max-width: 360px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: rgba(240, 192, 96, 0.12);
+  border: 1px solid rgba(240, 192, 96, 0.45);
+  color: #f0d79a;
+  font-size: 12px;
+  line-height: 1.4;
+  animation: wakePulse 1.6s ease-in-out infinite;
+}
+.wake-hint b { color: #ffe9b0; }
+.wake-hint.err {
+  background: rgba(255, 90, 90, 0.12);
+  border-color: rgba(255, 90, 90, 0.45);
+  color: #ffb0b0;
+  animation: none;
+}
+@keyframes wakePulse {
+  50% { border-color: rgba(240, 192, 96, 0.9); }
+}
+@media (max-width: 700px) {
+  header { flex-wrap: wrap; gap: 8px; }
+  .header-right { flex-wrap: wrap; }
+}
+
+/* 직업 선택 */
+.overlay.class-select { overflow-y: auto; justify-content: flex-start; padding: 14px 0; }
+.overlay.class-select h2 { color: #f0c060; text-shadow: 4px 4px 0 #3a2a10; margin-top: 4px; }
+.overlay .class-card {
+  width: 230px;
+  min-height: 0;
+  gap: 6px;
+  padding: 14px 12px 12px;
+  border-color: color-mix(in srgb, var(--cls) 55%, #2a1f3a);
+}
+.overlay .class-card:hover { border-color: var(--cls); }
+.class-portrait {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  width: 120px;
+  height: 104px;
+  border-radius: 12px;
+  background: radial-gradient(circle at 50% 70%, color-mix(in srgb, var(--cls) 35%, transparent), rgba(0, 0, 0, 0.3) 70%);
+}
+.class-card:hover .class-portrait img { animation: idleBob 0.8s ease-in-out infinite; }
+@keyframes idleBob { 50% { transform: translateY(-4px); } }
+.class-name { font-size: 18px !important; color: var(--cls) !important; }
+.class-summary { font-size: 12px; color: #c9c0d8; line-height: 1.4; }
+.class-stats { display: flex; gap: 8px; font-size: 12px; color: #c9c0d8; }
+.class-stats b { color: #fff; }
+.class-section {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 8px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.28);
+}
+.class-label { font-size: 11px; font-weight: bold; color: var(--cls); }
+.attack-guide { font-size: 12px; line-height: 1.5; color: #f2ecff; }
+.attack-guide b { color: #ffe678; }
+.range-line { display: block; font-size: 11px; color: #a49bb0; }
+.trait-desc { font-size: 12px; color: #f2ecff; line-height: 1.4; }
+
+.range-grid {
+  display: grid;
+  gap: 1px;
+  width: 104px;
+  margin-top: 2px;
+}
+.rg-cell {
+  aspect-ratio: 1;
+  background: #2a2036;
+  border-radius: 1px;
+}
+.rg-cell.on { background: rgba(255, 230, 120, 0.75); }
+.rg-cell.me { background: var(--cls); }
+
+/* 게임 중 직업 정보 */
+.class-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-color: color-mix(in srgb, var(--cls) 50%, #3d2b52);
+  font-size: 13px;
+}
+.class-info b { color: var(--cls); }
+.class-info small { display: block; font-size: 11px; color: #a49bb0; margin-top: 2px; }
+.fire-help { color: #ffe678; }
+.fire-help kbd { border-color: #ffe678; color: #ffe678; }
+
+.rank-cls { display: inline-block; vertical-align: middle; margin-right: 4px; }
+
+/* 효과음 켜기/끄기 버튼 */
+.mute-btn {
+  background: #1b1424; border: 2px solid #3d2b52; border-radius: 8px;
+  color: #f0e6ff; font-size: 16px; line-height: 1.2; padding: 3px 10px; cursor: pointer;
+}
+.mute-btn:hover { border-color: #f0c060; }
+
+/* 모바일 터치 조작 (터치 화면에서만 보인다) */
+.touch-pad { display: none; }
+.pad {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  font-family: inherit; font-weight: 900; font-size: 20px; color: #f0e6ff;
+  background: #2a2038; border: 2px solid #5b4478; border-radius: 10px;
+  box-shadow: inset 0 -3px 0 #120d1a; cursor: pointer;
+  touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+  user-select: none; -webkit-user-select: none;
+}
+.pad:active { background: #3d2b52; transform: translateY(1px); }
+.pad small { font-size: 10px; font-weight: 400; color: #bfa9d9; }
+@media (pointer: coarse) {
+  .touch-pad {
+    display: flex; justify-content: space-between; align-items: center; gap: 12px;
+    padding: 10px 14px; background: #0f0b16; border-top: 2px solid #3d2b52;
+  }
+  .dpad { display: grid; grid-template-columns: repeat(3, 56px); grid-template-rows: repeat(3, 52px); gap: 4px; }
+  .pad.up { grid-column: 2; grid-row: 1; }
+  .pad.left { grid-column: 1; grid-row: 2; }
+  .pad.center { grid-column: 2; grid-row: 2; font-size: 12px; }
+  .pad.right { grid-column: 3; grid-row: 2; }
+  .pad.down { grid-column: 2; grid-row: 3; }
+  .pad-actions { display: flex; flex-direction: column; gap: 8px; }
+  .pad.act { width: 96px; height: 52px; }
+}
+
+/* 보물상자 비교: 지금 장착한 장비의 능력치 */
+.current-box {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+.current-box .current-equip { margin-top: 0; }
+.current-stats { font-size: 12px; color: #c9c0d8; line-height: 1.4; text-align: center; }
