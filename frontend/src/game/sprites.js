@@ -188,6 +188,25 @@ const SPRITE_DATA = {
     '...$$$....$$$...',
     '..MMMM....MMMM..',
   ],
+  // 숨겨진 직업 소환사 (20층 도달 시 해금)
+  summoner: [
+    '.......ZZ.......',
+    '......ZZZZ......',
+    '.....ZZZZZZ.....',
+    '.....ZSSSSZ.....',
+    '.....ZSeSeZ.....',
+    '.....ZSSSSZ.....',
+    '....ZZZZZZZZ....',
+    '...zzzzzzzzzz...',
+    '..IIIIhhhhIIIIcc',
+    '..IIIIIIIIIIII.c',
+    '..IIIIIIIIIIIIjc',
+    '..IIIIIIIIIIIIj.',
+    '..IIIIIIIIIIIIj.',
+    '.IIIIIIIIIIIIIj.',
+    '...IIII..IIII...',
+    '..kkkk....kkkk..',
+  ],
   slime: [
     '................',
     '......vvvv......',
@@ -328,6 +347,29 @@ export function getSprite(name, tint) {
   })
   if (tint) applyTint(canvas, tint, 0.5)
   cache[key] = canvas
+  return canvas
+}
+
+// 맞았을 때 번쩍이는 하얀 그림 (같은 모양을 흰색으로)
+const flashCache = {}
+export function getFlashSprite(name) {
+  if (flashCache[name]) return flashCache[name]
+  const src = getSprite(name)
+  const canvas = document.createElement('canvas')
+  canvas.width = src.width
+  canvas.height = src.height
+  const ctx = canvas.getContext('2d')
+  ctx.drawImage(src, 0, 0)
+  const img = ctx.getImageData(0, 0, canvas.width, canvas.height)
+  for (let i = 3; i < img.data.length; i += 4) {
+    if (img.data[i] > 0) {
+      img.data[i - 3] = 255
+      img.data[i - 2] = 255
+      img.data[i - 1] = 255
+    }
+  }
+  ctx.putImageData(img, 0, 0)
+  flashCache[name] = canvas
   return canvas
 }
 

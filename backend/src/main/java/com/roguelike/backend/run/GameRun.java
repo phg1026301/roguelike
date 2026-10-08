@@ -35,6 +35,10 @@ public class GameRun {
     @Column(length = 30)
     private String deathCause;
 
+    // 난이도: 쉬움 / 보통 / 어려움 / 지옥 (예전 기록은 보통으로 본다)
+    @Column(columnDefinition = "varchar(10) default '보통'")
+    private String difficulty = "보통";
+
     // 직업: warrior / mage / archer
     @Column(length = 20)
     private String characterClass;

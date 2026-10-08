@@ -1,6 +1,6 @@
 // 캔버스에 던전을 픽셀아트로 그린다
 import { W, H } from './dungeon'
-import { getSprite } from './sprites'
+import { getSprite, getFlashSprite } from './sprites'
 import { BASE_VIEW, CLASSES, aimTarget } from './engine'
 
 export const TILE = 16
@@ -164,6 +164,17 @@ function drawBoss(ctx, tx, ty, depth) {
   ctx.drawImage(sprite, X + 8 - w / 2, Y + 16 - h, w, h)
 }
 
+// 맞은 순간 번쩍임: 같은 모양을 흰색으로 겹쳐 그리고 점점 흐리게
+function drawFlash(ctx, name, tx, ty, scale, alpha) {
+  const sprite = getFlashSprite(name)
+  const w = sprite.width * scale
+  const h = sprite.height * scale
+  ctx.globalAlpha = alpha
+  if (scale === 1) ctx.drawImage(sprite, tx * TILE, ty * TILE + 15 - sprite.height, w, h)
+  else ctx.drawImage(sprite, tx * TILE + 8 - w / 2, ty * TILE + 16 - h, w, h)
+  ctx.globalAlpha = 1
+}
+
 function drawStairs(ctx, tx, ty) {
   const X = tx * TILE
   const Y = ty * TILE
@@ -279,6 +290,7 @@ export function render(ctx, game, view = {}) {
   // 이동 중이면 칸 사이 보간 위치(view.player)를 따라가고, 흔들림(view.shake)을 더한다
   const vp = view.player || player
   const shake = view.shake || { x: 0, y: 0 }
+  const ft = view.fxT ?? 1 // 타격 연출 진행도 (0 → 1, 끝나면 1)
   const camX = Math.max(0, Math.min(W - VIEW_W, vp.x - Math.floor(VIEW_W / 2)))
   const camY = Math.max(0, Math.min(H - VIEW_H, vp.y - Math.floor(VIEW_H / 2)))
   ctx.save()
@@ -323,12 +335,34 @@ export function render(ctx, game, view = {}) {
     if (!visible[m.y][m.x]) continue
     // 몬스터도 이전 칸에서 미끄러져 온다
     const mv = (view.monsters && view.monsters.get(m.id)) || m
+    const name = m.boss ? bossSpriteName(game.depth) : (m.sprite || MONSTER_SPRITE[m.ch])
     if (m.boss) drawBoss(ctx, mv.x, mv.y, game.depth)
-    else drawEntity(ctx, m.sprite || MONSTER_SPRITE[m.ch], mv.x, mv.y, monsterTint(game.depth))
+    else drawEntity(ctx, name, mv.x, mv.y, monsterTint(game.depth))
+    if (ft < 0.5 && (game.fx || []).some((f) => (f.kind === 'hit' || f.kind === 'crit') && f.x === m.x && f.y === m.y)) {
+      drawFlash(ctx, name, mv.x, mv.y, m.boss ? 1.5 : 1, 0.85 * (1 - ft * 2))
+    }
     if (!m.boss && m.hp < m.maxHp) {
       px(ctx, mv.x * TILE + 2, mv.y * TILE - 1, 12, 2, '#3a0d0d')
       px(ctx, mv.x * TILE + 2, mv.y * TILE - 1, Math.max(1, Math.round((12 * m.hp) / m.maxHp)), 2, '#e83b3b')
     }
+  }
+  // 보스가 예고한 공격 칸: 빨간 테두리로 표시
+  for (const m of game.monsters) {
+    if (!m.boss || !m.telegraph) continue
+    for (const c of m.telegraph.cells) {
+      if (!visible[c.y][c.x]) continue
+      px(ctx, c.x * TILE + 1, c.y * TILE + 1, 14, 14, 'rgba(255,60,60,0.28)')
+      ctx.strokeStyle = 'rgba(255,90,90,0.95)'
+      ctx.lineWidth = 1
+      ctx.strokeRect(c.x * TILE + 1.5, c.y * TILE + 1.5, 13, 13)
+    }
+  }
+  // 돌 골렘 (소환사): 파란빛을 띤 골렘, 아래에 초록 체력바
+  if (game.pet && visible[game.pet.y][game.pet.x]) {
+    const pet = game.pet
+    drawEntity(ctx, 'golem', pet.x, pet.y, '#7fd3ff')
+    px(ctx, pet.x * TILE + 2, pet.y * TILE - 1, 12, 2, '#0d2a1a')
+    px(ctx, pet.x * TILE + 2, pet.y * TILE - 1, Math.max(1, Math.round((12 * pet.hp) / pet.maxHp)), 2, '#5fe0b0')
   }
   // 원거리 직업: 사거리 안 가장 가까운 적 발밑에 조준 표시
   const aim = !game.over && aimTarget(game)
@@ -358,7 +392,9 @@ export function render(ctx, game, view = {}) {
 
   // 5) 타격 효과(그림)를 먼저 그리고, 글자는 모아서 겹치지 않게 배치한다
   const labels = []
-  const addLabel = (fx, lines, priority) => labels.push({ x: fx.x * TILE + 8, y: fx.y * TILE - 1, lines, priority })
+  // 숫자는 맞는 순간 위로 떠오른다 (floats)
+  const rise = 8 * (1 - (1 - ft) ** 2)
+  const addLabel = (fx, lines, priority, floats = false) => labels.push({ x: fx.x * TILE + 8, y: fx.y * TILE - 1 - (floats ? rise : 0), lines, priority })
   for (const fx of game.fx || []) {
     const X = fx.x * TILE + 8
     const Y = fx.y * TILE
@@ -408,7 +444,7 @@ export function render(ctx, game, view = {}) {
     } else if (fx.kind === 'hit') {
       px(ctx, X - 4, Y + 4, 8, 1, '#fff6c0')
       px(ctx, X - 1, Y + 1, 1, 8, '#fff6c0')
-      addLabel(fx, [{ text: fx.text, color: '#fff6c0', size: 12 }], 2)
+      addLabel(fx, [{ text: fx.text, color: '#fff6c0', size: 12 }], 2, true)
     } else if (fx.kind === 'hurt') {
       px(ctx, fx.x * TILE, Y, TILE, TILE, 'rgba(255,40,40,0.25)')
       addLabel(fx, [{ text: fx.text, color: '#ff6b6b', size: 12 }], 1)
@@ -422,7 +458,46 @@ export function render(ctx, game, view = {}) {
       addLabel(fx, [
         { text: 'CRIT', color: '#e8d4ff', size: 8 },
         { text: fx.text, color: '#c9a0ff', size: 17 },
-      ], 0)
+      ], 0, true)
+    } else if (fx.kind === 'strike') {
+      // 보스 공격이 떨어지는 칸: 붉은 폭발이 번쩍이고 사선이 그어진 뒤 사라진다
+      if (view.fxT === undefined) continue
+      const cx0 = fx.x * TILE
+      const cy0 = fx.y * TILE
+      const a = 1 - ft
+      px(ctx, cx0, cy0, TILE, TILE, `rgba(255,70,40,${0.75 * a})`)
+      if (ft < 0.35) px(ctx, cx0 + 2, cy0 + 2, 12, 12, `rgba(255,240,200,${0.9 * (1 - ft / 0.35)})`)
+      const g = ctx.createRadialGradient(X, Y + 8, 1, X, Y + 8, 14)
+      g.addColorStop(0, `rgba(255,200,120,${0.7 * a})`)
+      g.addColorStop(1, 'rgba(255,60,30,0)')
+      ctx.fillStyle = g
+      ctx.fillRect(X - 14, Y - 6, 28, 28)
+      ctx.strokeStyle = `rgba(255,230,190,${a})`
+      ctx.lineWidth = 1
+      ctx.beginPath()
+      ctx.moveTo(cx0 + 1, cy0 + 1)
+      ctx.lineTo(cx0 + 15, cy0 + 15)
+      ctx.moveTo(cx0 + 15, cy0 + 1)
+      ctx.lineTo(cx0 + 1, cy0 + 15)
+      ctx.stroke()
+    } else if (fx.kind === 'summon') {
+      // 소환 빛: 원이 퍼지며 사라진다 (연출 중에만)
+      if (view.fxT === undefined) continue
+      ctx.strokeStyle = `rgba(127,211,255,${1 - ft})`
+      ctx.lineWidth = 1.5
+      ctx.beginPath()
+      ctx.ellipse(X, Y + 10, 3 + 9 * ft, 2 + 4 * ft, 0, 0, Math.PI * 2)
+      ctx.stroke()
+    } else if (fx.kind === 'burst') {
+      // 처치: 픽셀 조각이 사방으로 흩어진다 (연출 중에만)
+      if (view.fxT === undefined) continue
+      const colors = ['#ffe27a', '#ff6b6b', '#ffffff']
+      for (let i = 0; i < 8; i++) {
+        const a = (i / 8) * Math.PI * 2 + 0.3
+        const d = 2 + 13 * ft
+        const size = 1 + (1 - ft) * 2.5
+        px(ctx, X + Math.cos(a) * d - size / 2, Y + 8 + Math.sin(a) * d - size / 2, size, size, colors[i % 3])
+      }
     } else if (fx.kind === 'coin') {
       const color = fx.coin === 'gold' ? '#ffd23c' : fx.coin === 'silver' ? '#e4e8f0' : '#d08a50'
       ctx.fillStyle = color
@@ -456,8 +531,9 @@ export function render(ctx, game, view = {}) {
     const by = VIEW_H * TILE - 16
     px(ctx, bx - 2, by - 2, bw + 4, 10, 'rgba(10,4,14,0.85)')
     px(ctx, bx, by, bw, 6, '#3a0d14')
-    px(ctx, bx, by, Math.max(1, Math.round((bw * boss.hp) / boss.maxHp)), 6, boss.windup ? '#ff9a3b' : '#e0263f')
-    drawText(ctx, `👑 ${boss.name}  ${boss.hp}/${boss.maxHp}`, VIEW_W * TILE / 2, by - 5, '#ffd6dc', 9)
+    px(ctx, bx, by, Math.max(1, Math.round((bw * boss.hp) / boss.maxHp)), 6, boss.windup ? '#ff9a3b' : boss.phase === 2 ? '#ff5a2a' : '#e0263f')
+    px(ctx, bx + bw / 2, by - 1, 1, 8, 'rgba(255,255,255,0.85)') // 2페이즈 기준선 (체력 절반)
+    drawText(ctx, `👑 ${boss.name}  ${boss.hp}/${boss.maxHp}${boss.phase === 2 ? ' · 2페이즈' : ''}`, VIEW_W * TILE / 2, by - 5, '#ffd6dc', 9)
   }
 
   // 6) 맞은 턴엔 화면 가장자리를 붉게

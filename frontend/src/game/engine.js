@@ -8,10 +8,10 @@ const BOSS_EVERY = 5 // 몇 층마다 보스가 나오는지
 const BOSS_SCORE = 500
 // 난이도: 몬스터와 보스의 체력, 공격력, 경험치 배율 (시작 화면에서 고른다)
 export const DIFFICULTIES = {
-  쉬움: { hp: 0.7, atk: 0.7, xp: 0.8, desc: '몬스터가 약하다. 처음이라면 여기서 시작하세요' },
-  보통: { hp: 1, atk: 1, xp: 1, desc: '기본 난이도' },
-  어려움: { hp: 1.3, atk: 1.3, xp: 1.2, desc: '몬스터가 강하다. 포션과 장비를 잘 챙기세요' },
-  지옥: { hp: 1.7, atk: 1.6, xp: 1.5, desc: '살아남기 어렵다. 실력자용' },
+  쉬움: { hp: 0.7, atk: 0.7, xp: 0.8, scoreMult: 0.7, desc: '몬스터가 약하다. 처음이라면 여기서 시작하세요' },
+  보통: { hp: 1, atk: 1, xp: 1, scoreMult: 1, desc: '기본 난이도' },
+  어려움: { hp: 1.3, atk: 1.3, xp: 1.2, scoreMult: 1.3, desc: '몬스터가 강하다. 포션과 장비를 잘 챙기세요' },
+  지옥: { hp: 1.7, atk: 1.6, xp: 1.5, scoreMult: 1.6, desc: '살아남기 어렵다. 실력자용' },
 }
 export const DIFFICULTY_IDS = Object.keys(DIFFICULTIES)
 function diffOf(name) {
@@ -86,8 +86,17 @@ export const CLASSES = {
     traitName: '선제 사격', traitDesc: '아직 다치지 않은 적을 맞히면 2배 피해 · 기본 치명타 15%',
     summary: '가장 먼 사거리와 날카로운 한 발로 적을 처리한다',
   },
+  summoner: {
+    name: '소환사', icon: '📜', sprite: 'summoner', color: '#e0a040',
+    hp: 18, atk: 3, def: 0, crit: 0, range: 5,
+    attackDesc: '마력 화살 발사',
+    traitName: '돌 골렘 소환', traitDesc: 'E키로 돌 골렘을 소환한다. 골렘이 앞에서 적을 막고 함께 공격한다 (재소환 5턴)',
+    summary: '돌 골렘을 세워 두고 뒤에서 원거리로 공격한다',
+  },
 }
 export const CLASS_IDS = ['warrior', 'mage', 'archer']
+// 숨겨진 직업: 해금한 것만 직업 선택 창에 나온다 (20층 도달 시 해금)
+export const HIDDEN_CLASS_IDS = ['summoner']
 const MELEE_PENALTY = 0.6 // 원거리 직업이 근접 공격하면 피해 60%
 
 export function isShopFloor(depth) {
@@ -286,6 +295,8 @@ function makeBoss(pos, stats, diff) {
     id: nextId++, ch: 'B', boss: true, ...pos, name: stats.name,
     hp, maxHp: hp, atk: scale(stats.atk, diff.atk), speed: 0.6, xp: scale(stats.xp, diff.xp),
     cooldown: 2, windup: false, summoned: false,
+    phase: 1, // 2 = 체력 절반 이하 (십자 파동 사용)
+    telegraph: null, // 예고한 공격 { kind: 'line' | 'cross', cells: [{x, y}] }
   }
 }
 
@@ -330,6 +341,8 @@ export function newGame(cls = 'mage', { picking = false, difficulty = '보통' }
     shopOpen: false,
     picking,
     difficulty: DIFFICULTIES[difficulty] ? difficulty : '보통',
+    pet: null, // 소환사의 돌 골렘 { x, y, hp, maxHp, atk, life }
+    summonCd: 0, // 다시 소환할 때까지 남은 턴
     messages: [
       `${c.icon} ${c.name}(으)로 던전에 들어왔다. 계단(>)을 찾아 내려가자!`,
       ...(c.range ? [`F키: 사거리 ${c.range}칸 안의 가장 가까운 적에게 ${c.attackDesc}`] : []),
@@ -339,8 +352,10 @@ export function newGame(cls = 'mage', { picking = false, difficulty = '보통' }
   return updateFov(state)
 }
 
+// 점수: 기본 점수 × 난이도 배율 (서버 계산과 같은 식)
 export function score(state) {
-  return state.depth * 100 + state.kills * 10 + (state.bossKills || 0) * BOSS_SCORE
+  const base = state.depth * 100 + state.kills * 10 + (state.bossKills || 0) * BOSS_SCORE
+  return Math.round(base * diffOf(state.difficulty).scoreMult)
 }
 
 // 선택 창이 떠 있으면 턴이 진행되지 않는다
@@ -450,6 +465,7 @@ function killMonster(state, m) {
   state.monsters = state.monsters.filter((mm) => mm.id !== m.id)
   state.kills += 1
   log(state, `${m.name}을(를) 처치했다! (+${m.xp} XP)`)
+  state.fx.push({ x: m.x, y: m.y, kind: 'burst', big: Boolean(m.boss) }) // 처치 파티클
   dropCoins(state, m)
   if (m.boss) {
     state.bossKills += 1
@@ -468,6 +484,89 @@ function killMonster(state, m) {
   gainXp(state, m.xp)
 }
 
+function petAt(state, x, y) {
+  return Boolean(state.pet && state.pet.x === x && state.pet.y === y)
+}
+
+// 골렘을 세울 자리: 플레이어 주변 빈 칸 중 가장 가까운 적 쪽
+function petSpot(state) {
+  const p = state.player
+  const foes = state.monsters.filter((m) => !m.dead && state.visible[m.y][m.x])
+  let best = null
+  let bestD = Infinity
+  for (let dy = -1; dy <= 1; dy++) {
+    for (let dx = -1; dx <= 1; dx++) {
+      if (!dx && !dy) continue
+      const x = p.x + dx
+      const y = p.y + dy
+      if (state.tiles[y][x] !== '.' || monsterAt(state, x, y) || npcAt(state, x, y)) continue
+      const d = foes.length ? Math.min(...foes.map((m) => Math.hypot(m.x - x, m.y - y))) : 0
+      if (d < bestD) {
+        best = { x, y }
+        bestD = d
+      }
+    }
+  }
+  return best
+}
+
+// 몬스터가 골렘을 때린다 (골렘은 방어 1)
+function hurtPet(state, m) {
+  const pet = state.pet
+  const dmg = Math.max(1, randInt(Math.max(1, m.atk - 1), m.atk) - 1)
+  pet.hp -= dmg
+  state.fx.push({ x: pet.x, y: pet.y, kind: 'hurt', text: `-${dmg}` })
+  log(state, `${m.name}이(가) 돌 골렘을 공격했다. ${dmg} 피해`)
+  if (pet.hp <= 0) {
+    state.pet = null
+    log(state, '🪨 돌 골렘이 부서졌다...')
+  }
+}
+
+// 골렘의 한 턴: 지속 시간이 끝나면 흩어지고, 옆의 적 하나를 때린다
+function petAct(state) {
+  if (!state.pet || state.over) return
+  const pet = state.pet
+  pet.life -= 1
+  if (pet.life <= 0) {
+    state.pet = null
+    log(state, '돌 골렘이 흩어졌다. (지속 시간 끝)')
+    return
+  }
+  const foe = state.monsters.find((m) => !m.dead && isAdjacent(m, pet))
+  if (foe) {
+    const dmg = randInt(Math.max(1, pet.atk - 1), pet.atk + 1)
+    foe.hp -= dmg
+    state.fx.push({ x: foe.x, y: foe.y, kind: 'hit', text: `${dmg}` })
+    log(state, `🪨 돌 골렘이 ${foe.name}을(를) 때렸다! ${dmg} 피해`)
+    if (foe.hp <= 0) killMonster(state, foe)
+  }
+}
+
+// 보스 공격 예고: 플레이어가 공격 범위 안에 있을 때만 준비한다
+function bossPattern(state, m) {
+  const p = state.player
+  const dx = p.x - m.x
+  const dy = p.y - m.y
+  const open = (x, y) => x >= 0 && y >= 0 && x < W && y < H && state.tiles[y][x] !== '#'
+  // 십자 파동 (2페이즈): 보스 주변 十자 모양 2칸
+  if (m.phase === 2) {
+    const cells = [[1, 0], [2, 0], [-1, 0], [-2, 0], [0, 1], [0, 2], [0, -1], [0, -2]]
+      .map(([x, y]) => ({ x: m.x + x, y: m.y + y }))
+      .filter((c) => open(c.x, c.y))
+    if (cells.some((c) => c.x === p.x && c.y === p.y)) return { kind: 'cross', cells }
+  }
+  // 돌진 줄기: 같은 줄(가로/세로) 4칸 앞까지
+  if ((dx === 0) !== (dy === 0) && Math.abs(dx) + Math.abs(dy) <= 5) {
+    const sx = Math.sign(dx)
+    const sy = Math.sign(dy)
+    const cells = []
+    for (let i = 1; i <= 4 && open(m.x + sx * i, m.y + sy * i); i++) cells.push({ x: m.x + sx * i, y: m.y + sy * i })
+    if (cells.some((c) => c.x === p.x && c.y === p.y)) return { kind: 'line', cells }
+  }
+  return null
+}
+
 function monstersAct(state) {
   const p = state.player
   for (const m of [...state.monsters]) {
@@ -476,6 +575,27 @@ function monstersAct(state) {
     const dx = p.x - m.x
     const dy = p.y - m.y
     const adjacent = Math.abs(dx) + Math.abs(dy) === 1
+    // 골렘이 옆에 있으면 골렘을 먼저 때린다 (플레이어가 같이 붙어 있으면 대부분 골렘을 공격)
+    if (state.pet && isAdjacent(m, state.pet) && (!adjacent || Math.random() < 0.7)) {
+      hurtPet(state, m)
+      continue
+    }
+    if (m.boss && m.telegraph) {
+      // 예고했던 공격을 이제 한다. 플레이어가 빨간 칸에서 벗어났다면 빗나간다
+      const t = m.telegraph
+      m.telegraph = null
+      m.cooldown = m.phase === 2 ? 1 : 2
+      const name = t.kind === 'line' ? '돌진 줄기' : '십자 파동'
+      // 예고한 칸이 터지는 이펙트 (맞든 빗나가든 보인다)
+      for (const c of t.cells) state.fx.push({ x: c.x, y: c.y, kind: 'strike', line: t.kind === 'line' })
+      if (t.cells.some((c) => c.x === p.x && c.y === p.y)) {
+        const dmg = Math.max(2, Math.round(m.atk * (t.kind === 'line' ? 1.5 : 1.2)) - p.def)
+        hurtPlayer(state, m, dmg, `💥 ${m.name}의 ${name}! ${dmg} 피해!`)
+      } else {
+        log(state, `${m.name}의 ${name}이 빗나갔다!`)
+      }
+      continue
+    }
     if (m.boss && m.windup) {
       // 준비한 내려치기 발동
       m.windup = false
@@ -493,6 +613,15 @@ function monstersAct(state) {
       state.fx.push({ x: m.x, y: m.y, kind: 'warn', text: '!' })
       log(state, `⚠ ${m.name}가 내려치기를 준비한다! 피하자!`)
       continue
+    }
+    if (m.boss && !adjacent && m.cooldown <= 0) {
+      const pattern = bossPattern(state, m)
+      if (pattern) {
+        m.telegraph = pattern
+        const name = pattern.kind === 'line' ? '돌진 줄기' : '십자 파동'
+        log(state, `⚠ ${m.name}이(가) ${name}을 준비한다! 빨간 칸에서 벗어나자!`)
+        continue
+      }
     }
     if (m.boss && m.cooldown > 0) m.cooldown -= 1
     if (adjacent) {
@@ -513,7 +642,7 @@ function monstersAct(state) {
       if (mx === 0 && my === 0) continue
       const nx = m.x + mx
       const ny = m.y + my
-      if (state.tiles[ny][nx] === '#' || monsterAt(state, nx, ny) || npcAt(state, nx, ny)) continue
+      if (state.tiles[ny][nx] === '#' || monsterAt(state, nx, ny) || npcAt(state, nx, ny) || petAt(state, nx, ny)) continue
       if (nx === p.x && ny === p.y) continue
       m.x = nx
       m.y = ny
@@ -545,6 +674,8 @@ function endTurn(prevState, fledFrom = []) {
   const state = updateFov(prevState) // 몬스터는 플레이어의 '현재' 위치 기준으로 판단
   const p = state.player
   monstersAct(state)
+  petAct(state)
+  if (state.summonCd > 0) state.summonCd -= 1
   if (!state.over) {
     for (const id of fledFrom) {
       const m = state.monsters.find((mm) => mm.id === id)
@@ -571,7 +702,8 @@ function attack(state, target, ranged = false) {
   const isCrit = Math.random() < p.crit
   if (isCrit) dmg *= 2
   target.hp -= dmg
-  state.fx.push({ x: target.x, y: target.y, kind: isCrit ? 'crit' : 'hit', text: `${dmg}` })
+  // big: 보스를 맞힌 타격 (화면 흔들림을 더 세게)
+  state.fx.push({ x: target.x, y: target.y, kind: isCrit ? 'crit' : 'hit', text: `${dmg}`, big: Boolean(target.boss) })
   if (isCrit) log(state, '💜 치명타!')
   // 마법사 마나 폭발: 원거리 공격 5번째마다
   if (p.cls === 'mage' && ranged) {
@@ -592,6 +724,12 @@ function attack(state, target, ranged = false) {
   if (target.boss && target.hp > 0 && !target.summoned && target.hp <= target.maxHp / 2) {
     target.summoned = true
     summonMinions(state, target)
+  }
+  if (target.boss && target.hp > 0 && target.phase === 1 && target.hp <= target.maxHp / 2) {
+    target.phase = 2
+    target.cooldown = 1
+    state.fx.push({ x: target.x, y: target.y, kind: 'burst', big: true })
+    log(state, `😈 ${target.name}가 격노했다! 2페이즈 — 십자 파동을 쓴다!`)
   }
   // 불꽃검: 대상 주변 적에게 화염 피해
   if (hasSpecial(p, 'fire') && Math.random() < 0.25) {
@@ -628,6 +766,10 @@ export function move(prev, dx, dy) {
   state.fx = []
   const p = state.player
 
+  if (petAt(state, nx, ny)) {
+    log(state, '돌 골렘이 길을 막고 있다.')
+    return state
+  }
   const target = monsterAt(state, nx, ny)
   if (target) {
     attack(state, target)
@@ -658,8 +800,13 @@ export function move(prev, dx, dy) {
     p.maxHp += 2
     p.hp = Math.min(p.maxHp, p.hp + 4)
     if (state.depth % 2 === 1) p.atk += 1
+    if (state.pet) {
+      state.pet = null
+      log(state, '돌 골렘은 계단을 따라오지 못하고 사라졌다.')
+    }
     Object.assign(state, buildFloor(state.depth, p, state.difficulty))
     log(state, `지하 ${state.depth}층으로 내려왔다. 조금 더 강해진 느낌이다.`)
+    if (state.depth === 20) log(state, '🔓 숨겨진 직업 「소환사」가 해금됐다! 다음 게임부터 고를 수 있다.')
     if (state.depth % BOSS_EVERY === 0) log(state, '⚠ 강력한 보스의 기운이 느껴진다... 계단을 지키고 있다!')
     if (state.npc) log(state, '🛒 어딘가에서 상인의 목소리가 들린다. 상인에게 다가가면 거래할 수 있다.')
     state.turns += 1
@@ -667,6 +814,37 @@ export function move(prev, dx, dy) {
   }
 
   return endTurn(state, adjacentBefore)
+}
+
+// E키: 돌 골렘 소환 (소환사 전용, 한 번에 한 마리)
+export function summon(prev) {
+  if (blocked(prev)) return prev
+  const state = structuredClone(prev)
+  state.fx = []
+  if (state.player.cls !== 'summoner') {
+    log(state, '소환사만 골렘을 소환할 수 있다.')
+    return state
+  }
+  if (state.pet) {
+    log(state, '이미 돌 골렘이 있다.')
+    return state
+  }
+  if (state.summonCd > 0) {
+    log(state, `골렘을 다시 소환하려면 ${state.summonCd}턴 기다려야 한다.`)
+    return state
+  }
+  const spot = petSpot(state)
+  if (!spot) {
+    log(state, '골렘을 세울 빈 칸이 없다.')
+    return state
+  }
+  const diff = diffOf(state.difficulty)
+  const hp = scale(14 + state.depth, diff.hp)
+  state.pet = { x: spot.x, y: spot.y, hp, maxHp: hp, atk: scale(3 + Math.floor(state.depth / 3), diff.atk), life: 12 }
+  state.summonCd = 5
+  state.fx.push({ x: spot.x, y: spot.y, kind: 'summon' })
+  log(state, '📜 돌 골렘을 소환했다! 앞에서 적을 막아 준다.')
+  return endTurn(state)
 }
 
 // F키: 원거리 공격

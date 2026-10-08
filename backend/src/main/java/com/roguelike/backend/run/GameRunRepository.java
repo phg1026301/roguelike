@@ -11,6 +11,9 @@ public interface GameRunRepository extends JpaRepository<GameRun, Long> {
     @EntityGraph(attributePaths = "user")
     List<GameRun> findTop10ByOrderByScoreDescCreatedAtAsc();
 
+    @EntityGraph(attributePaths = "user")
+    List<GameRun> findTop10ByDifficultyOrderByScoreDescCreatedAtAsc(String difficulty);
+
     List<GameRun> findTop20ByUserOrderByCreatedAtDesc(User user);
 
     long countByScoreGreaterThan(int score);

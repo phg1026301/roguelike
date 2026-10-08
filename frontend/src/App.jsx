@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import './App.css'
-import { newGame, move, wait, drinkPotion, score, chooseCard, CARDS, xpToNext, chestChoose, shopBuy, shopClose, fire, CLASSES, CLASS_IDS, setDifficulty, DIFFICULTIES, DIFFICULTY_IDS } from './game/engine'
+import { newGame, move, wait, drinkPotion, score, chooseCard, CARDS, xpToNext, chestChoose, shopBuy, shopClose, fire, summon, CLASSES, CLASS_IDS, HIDDEN_CLASS_IDS, setDifficulty, DIFFICULTIES, DIFFICULTY_IDS } from './game/engine'
 import { spriteUrl } from './game/sprites'
 import { RARITY, SLOTS, describeItem, coinTotal, formatPrice } from './game/items'
 import { itemIconUrl } from './game/itemSprites'
@@ -17,29 +17,32 @@ const COMMANDS = {
   wait: (g) => wait(g),
   potion: (g) => drinkPotion(g),
   fire: (g) => fire(g),
+  summon: (g) => summon(g),
   escape: (g) => pressEscape(g),
   restart: (g) => (g.over ? { ...g, picking: true } : g),
 }
 const KEY_COMMAND = {
   ArrowUp: 'up', w: 'up', ArrowDown: 'down', s: 'down', ArrowLeft: 'left', a: 'left', ArrowRight: 'right', d: 'right',
-  ' ': 'wait', '.': 'wait', q: 'potion', f: 'fire', Escape: 'escape', r: 'restart',
+  ' ': 'wait', '.': 'wait', q: 'potion', f: 'fire', e: 'summon', Escape: 'escape', r: 'restart',
 }
 const TURN_CMDS = new Set(['up', 'down', 'left', 'right', 'wait'])
 
 // 연출 값
 const MOVE_MS = 120 // 칸 사이 이동 시간
 const SHAKE_MS = 260 // 화면 흔들림 시간
-const SHAKE_AMP = { hurt: 3, crit: 2.5, blast: 2.5, fire: 2 } // 흔들림 세기 (논리 픽셀)
+const SHAKE_AMP = { hurt: 3, crit: 2.5, blast: 2.5, fire: 2, burst: 1.2 }
+const FX_MS = 360 // 숫자 떠오르기, 번쩍임, 파티클 시간 // 흔들림 세기 (논리 픽셀)
 const SOUND_PRIORITY = ['hurt', 'crit', 'blast', 'fire', 'magic', 'arrow', 'hit', 'coin', 'heal', 'warn']
 
 // 발사체는 마법탄/화살 소리로 구분한다
 function fxKind(f) {
+  if (f.kind === 'strike') return 'blast' // 보스 공격은 폭발 소리와 흔들림
   if (f.kind !== 'shot') return f.kind
   return f.cls === 'mage' ? 'magic' : 'arrow'
 }
 
 // 상태가 바뀔 때 한 번 실행: 이동 준비, 효과음, 흔들림
-function announce(prev, game, anim, shake) {
+function announce(prev, game, anim, shake, fxClock) {
   const now = performance.now()
   const sameFloor = prev.depth === game.depth && !prev.picking && !game.picking
   const moved = sameFloor && (prev.player.x !== game.player.x || prev.player.y !== game.player.y)
@@ -58,6 +61,7 @@ function announce(prev, game, anim, shake) {
     for (const name of SOUND_PRIORITY.filter((k) => kinds.has(k)).slice(0, 2)) playSound(name)
     let amp = 0
     for (const k of kinds) amp = Math.max(amp, SHAKE_AMP[k] || 0)
+    if ((game.fx || []).some((f) => f.big)) amp = Math.max(amp, 3) // 보스를 맞히면 크게 흔든다
     if (game.bossKills > prev.bossKills) {
       playSound('boss')
       amp = Math.max(amp, 4)
@@ -65,6 +69,7 @@ function announce(prev, game, anim, shake) {
       playSound('kill')
     }
     if (amp) shake.current = { start: now, amp }
+    if ((game.fx || []).length) fxClock.current = { start: now }
   }
   if (game.over && !prev.over) {
     playSound('die')
@@ -77,7 +82,7 @@ function announce(prev, game, anim, shake) {
 }
 
 // 지금 시각의 화면 위치와 흔들림 (그릴 때마다 계산한다)
-function viewAt(now, game, anim, shake) {
+function viewAt(now, game, anim, shake, fxClock) {
   const view = { player: null, monsters: null, shake: { x: 0, y: 0 } }
   let busy = false
   const a = anim.current
@@ -108,20 +113,54 @@ function viewAt(now, game, anim, shake) {
       busy = true
     }
   }
+  const f = fxClock.current
+  if (f) {
+    const t = (now - f.start) / FX_MS
+    if (t >= 1) fxClock.current = null
+    else {
+      view.fxT = Math.max(0, t)
+      busy = true
+    }
+  }
   return { view, busy }
 }
 
 // 난이도 버튼 색 (CSS의 d-easy 등과 맞춘다)
 const DIFF_CLASS = { 쉬움: 'easy', 보통: 'normal', 어려움: 'hard', 지옥: 'hell' }
+// 랭킹 탭 (전체 + 난이도별)
+const RANK_TABS = ['전체', ...DIFFICULTY_IDS]
 
 // 숫자키: 지금 떠 있는 선택 창에 맞게 처리 (레벨업 > 상자 > 상점)
-function pickClass(g, index) {
-  const cls = CLASS_IDS[index]
+function pickClass(g, index, choices) {
+  const cls = choices[index]
   return cls ? newGame(cls, { difficulty: g.difficulty }) : g
 }
 
-function pressNumber(g, index) {
-  if (g.picking) return pickClass(g, index)
+// 해금한 직업은 로컬 저장소에 보관한다 (브라우저마다 따로)
+const UNLOCK_KEY = 'roguelike.unlocks'
+function loadUnlocks() {
+  try {
+    return JSON.parse(localStorage.getItem(UNLOCK_KEY)) || []
+  } catch {
+    return []
+  }
+}
+function saveUnlocks(list) {
+  try {
+    localStorage.setItem(UNLOCK_KEY, JSON.stringify(list))
+  } catch {
+    // 저장이 막혀 있어도 게임은 계속된다
+  }
+}
+const UNLOCK_RULES = { summoner: { depth: 20, text: '소환사' } }
+
+// 지금 고를 수 있는 직업: 기본 3개 + 해금한 숨겨진 직업
+function availableClasses() {
+  return [...CLASS_IDS, ...HIDDEN_CLASS_IDS.filter((id) => loadUnlocks().includes(id))]
+}
+
+function pressNumber(g, index, choices) {
+  if (g.picking) return pickClass(g, index, choices)
   if (g.levelUp) return chooseCard(g, index)
   if (g.chest) return chestChoose(g, index)
   if (g.shopOpen) return shopBuy(g, index)
@@ -238,6 +277,8 @@ function App() {
   const [server, setServer] = useState('확인 중')
   const [auth, setAuth] = useState(loadAuth)
   const [ranking, setRanking] = useState([])
+  const [rankTab, setRankTab] = useState('전체')
+  const rankTabRef = useRef('전체')
   const [saveResult, setSaveResult] = useState(null) // { game, rank } 또는 { game, error }
   const [notice, setNotice] = useState('')
   const [loggingIn, setLoggingIn] = useState(false)
@@ -246,10 +287,17 @@ function App() {
   const prevGameRef = useRef(game)
   const animRef = useRef(null)
   const shakeRef = useRef(null)
+  const fxRef = useRef(null)
 
+  // 랭킹 탭(전체/쉬움/보통/어려움/지옥): 현재 탭 기준으로 다시 불러온다
   const refreshRanking = useCallback(() => {
-    api.ranking().then(setRanking).catch(() => {})
+    api.ranking(rankTabRef.current).then(setRanking).catch(() => {})
   }, [])
+  const pickRankTab = (tab) => {
+    rankTabRef.current = tab
+    setRankTab(tab)
+    refreshRanking()
+  }
 
   // 첫 접속: 서버 깨우기 + 랭킹 불러오기
   // Render 무료 서버는 잠들어 있으면 깨어나는 데 최대 1분 정도 걸려서, 연결될 때까지 5초마다 다시 시도한다
@@ -336,7 +384,7 @@ function App() {
         return
       }
       if (/^[1-6]$/.test(key)) {
-        setGame((g) => pressNumber(g, Number(key) - 1))
+        setGame((g) => pressNumber(g, Number(key) - 1, availableClasses()))
         return
       }
       const cmd = KEY_COMMAND[key]
@@ -352,11 +400,11 @@ function App() {
   useEffect(() => {
     const prev = prevGameRef.current
     prevGameRef.current = game
-    if (prev !== game) announce(prev, game, animRef, shakeRef)
+    if (prev !== game) announce(prev, game, animRef, shakeRef, fxRef)
     const ctx = canvasRef.current.getContext('2d')
     let raf = 0
     const step = (now) => {
-      const { view, busy } = viewAt(now, game, animRef, shakeRef)
+      const { view, busy } = viewAt(now, game, animRef, shakeRef, fxRef)
       render(ctx, game, view)
       if (busy) raf = requestAnimationFrame(step)
     }
@@ -381,6 +429,14 @@ function App() {
     setAuth(null)
     setNotice('로그아웃했어요.')
   }
+
+  // 해금: 20층에 도달하면 로컬 저장소에 기록한다 (화면 상태는 바꾸지 않는다)
+  useEffect(() => {
+    const won = Object.keys(UNLOCK_RULES).filter((id) => game.depth >= UNLOCK_RULES[id].depth)
+    if (won.length) saveUnlocks([...new Set([...loadUnlocks(), ...won])])
+  }, [game.depth])
+
+  const classChoices = availableClasses()
 
   const p = game.player
   const hpPercent = Math.round((p.hp / p.maxHp) * 100)
@@ -442,6 +498,9 @@ function App() {
             <div className="pad-actions">
               {p.range > 0 && (
                 <button className="pad act" onPointerDown={press('fire')}>F<small>원거리 공격</small></button>
+              )}
+              {p.cls === 'summoner' && (
+                <button className="pad act" onPointerDown={press('summon')}>E<small>골렘 소환</small></button>
               )}
               <button className="pad act" onPointerDown={press('potion')}>Q<small>포션 {p.potions}개</small></button>
             </div>
@@ -583,8 +642,17 @@ function App() {
               </div>
               <p className="diff-desc">{DIFFICULTIES[game.difficulty].desc}</p>
               <div className="cards">
-                {CLASS_IDS.map((id, i) => (
-                  <ClassCard key={id} id={id} index={i} onPick={() => setGame((g) => pickClass(g, i))} />
+                {classChoices.map((id, i) => (
+                  <ClassCard key={id} id={id} index={i} onPick={() => setGame((g) => pickClass(g, i, classChoices))} />
+                ))}
+                {HIDDEN_CLASS_IDS.filter((id) => !classChoices.includes(id)).map((id) => (
+                  // 아직 해금하지 않은 숨겨진 직업: 물음표 카드 (클릭 불가)
+                  <div key={id} className="card class-card locked" aria-label="잠긴 직업">
+                    <span className="card-key">{classChoices.length + 1}</span>
+                    <span className="class-portrait"><span className="mystery">?</span></span>
+                    <b className="class-name">???</b>
+                    <span className="class-summary">20층에 도달하면 열리는 숨겨진 직업</span>
+                  </div>
                 ))}
               </div>
             </div>
@@ -691,6 +759,11 @@ function App() {
 
           <div className="panel ranking">
             <div className="panel-title">🏆 랭킹 TOP 10</div>
+            <div className="rank-tabs">
+              {RANK_TABS.map((tab) => (
+                <button key={tab} className={`rank-tab ${rankTab === tab ? 'on' : ''}`} onClick={() => pickRankTab(tab)}>{tab}</button>
+              ))}
+            </div>
             {ranking.length === 0 ? (
               <div className="empty">아직 기록이 없어요. 첫 번째 주인공이 되어보세요!</div>
             ) : (
@@ -703,7 +776,7 @@ function App() {
                       {r.nickname}
                     </span>
                     <span className="pts">{r.score}</span>
-                    <span className="meta">지하 {r.depth}층</span>
+                    <span className="meta">지하 {r.depth}층{rankTab === '전체' && r.difficulty ? ` · ${r.difficulty}` : ''}</span>
                   </li>
                 ))}
               </ol>
@@ -722,6 +795,9 @@ function App() {
             <div><kbd>←↑↓→</kbd> <kbd>WASD</kbd> 이동 · {p.range ? '근접 공격(약함)' : '공격'}</div>
             {p.range > 0 && (
               <div className="fire-help"><kbd>F</kbd> 원거리 공격 · 사거리 <b>{p.range}칸</b> (노란 표시가 붙은 적을 자동 조준)</div>
+            )}
+            {p.cls === 'summoner' && (
+              <div className="fire-help"><kbd>E</kbd> 돌 골렘 소환 · 골렘은 앞에서 적을 막아 준다</div>
             )}
             <div><kbd>Space</kbd> 쉬기 <kbd>Q</kbd> 포션 · <kbd>M</kbd> 효과음 {muted ? '꺼짐' : '켜짐'}</div>
             <div className="hint">적 강함: 쥐 &lt; 고블린 &lt; 오크 · 5층마다 보스 · 6, 11층…에 상점</div>

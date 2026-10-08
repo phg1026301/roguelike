@@ -45,12 +45,12 @@ async function request(path, { method = 'GET', body, token } = {}) {
 
 export const api = {
   health: () => request('/api/health'),
-  ranking: () => request('/api/ranking'),
+  ranking: (difficulty) => request(difficulty && difficulty !== '전체' ? `/api/ranking?difficulty=${encodeURIComponent(difficulty)}` : '/api/ranking'),
   loginUrl: () => request(`/api/auth/kakao/login-url?redirectUri=${encodeURIComponent(REDIRECT_URI)}`),
   kakaoLogin: (code) => request('/api/auth/kakao', { method: 'POST', body: { code, redirectUri: REDIRECT_URI } }),
   saveRun: (token, run) => request('/api/runs', { method: 'POST', body: run, token }),
 }
 
 export function runFromGame(game) {
-  return { depth: game.depth, kills: game.kills, bossKills: game.bossKills || 0, cls: game.player.cls, turns: game.turns, deathCause: game.deathCause }
+  return { depth: game.depth, kills: game.kills, bossKills: game.bossKills || 0, cls: game.player.cls, turns: game.turns, deathCause: game.deathCause, difficulty: game.difficulty }
 }

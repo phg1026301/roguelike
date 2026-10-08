@@ -834,3 +834,12 @@ button.kakao:disabled { opacity: 0.6; cursor: wait; }
 .diff-btn { border-color: var(--dc, #3d2b52); }
 .diff-btn.on { background: var(--dc); color: #120d1a; }
 .diff-desc { font-size: 13px; color: #c9c0d8; margin: 4px 0 0; }
+
+/* 랭킹 난이도 탭 */
+.rank-tabs { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0 6px; }
+.rank-tab { flex: 1 1 0; padding: 3px 0; font-size: 11px; background: #1a1424; color: #b8aed0; border: 1px solid #3a3050; border-radius: 4px; cursor: pointer; }
+.rank-tab.on { background: #f0c060; color: #1a1424; border-color: #f0c060; font-weight: 700; }
+
+/* 잠긴 숨겨진 직업 (물음표 카드) */
+.class-card.locked { cursor: default; filter: grayscale(0.6) brightness(0.8); }
+.class-card.locked .mystery { display: inline-flex; align-items: center; justify-content: center; width: 96px; height: 96px; font-size: 56px; font-weight: 900; color: #7a7490; }
