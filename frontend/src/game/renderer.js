@@ -11,6 +11,45 @@ export const RENDER_SCALE = 3
 
 const MONSTER_SPRITE = { r: 'rat', g: 'goblin', O: 'orc', B: 'boss' }
 
+// 10층 구간마다 몬스터와 보스의 색 톤이 바뀐다 (1구간 흙빛, 2구간 얼음빛, 3구간 보랏빛, 반복)
+const MONSTER_TINTS = ['#9a5cff', '#c98a4a', '#8fd8ff']
+// 10층 폭군 오우거, 20층 심연의 군주, 30층 이후 잿빛 대마왕 (각자 다른 그림)
+const BOSS_SPRITES = ['ogre', 'abyss', 'ashdemon']
+function tierOf(depth) {
+  return Math.floor((depth - 1) / 10)
+}
+function monsterTint(depth) {
+  const tier = tierOf(depth)
+  return tier === 0 ? null : MONSTER_TINTS[tier % MONSTER_TINTS.length]
+}
+function bossSpriteName(depth) {
+  const tier = tierOf(depth)
+  return tier === 0 ? 'boss' : BOSS_SPRITES[Math.min(tier, BOSS_SPRITES.length) - 1]
+}
+
+// 10층마다 맵 테마가 바뀐다: 던전 → 동굴 → 얼음 성 → (반복)
+const THEMES = [
+  {
+    grass: true, floor: '#363a31', floorA: '#535947', floorB: '#4c5141', floorC: '#585e4c', floorHi: '#646b56', floorLo: '#42463a',
+    wallFace: '#26232e', brickA: '#46404f', brickB: '#3e3947', brickHi: '#544d5e', wallLip: '#5d566c', wallLo: '#141218',
+    wallTop: '#17151d', wallEdge: '#3a3546',
+  },
+  {
+    grass: false, floor: '#2d2f36', floorA: '#41444d', floorB: '#3a3d46', floorC: '#474a54', floorHi: '#565a64', floorLo: '#2b2d34',
+    wallFace: '#1d262a', brickA: '#2f4147', brickB: '#27373c', brickHi: '#41585f', wallLip: '#4f6a70', wallLo: '#0e1416',
+    wallTop: '#121a1c', wallEdge: '#2a3a3e',
+  },
+  {
+    grass: false, floor: '#34424f', floorA: '#56707f', floorB: '#4d6777', floorC: '#5f7d8d', floorHi: '#83a2b3', floorLo: '#43566a',
+    wallFace: '#22334a', brickA: '#37516b', brickB: '#2d4660', brickHi: '#4f6f8a', wallLip: '#8fb5cc', wallLo: '#0f1a28',
+    wallTop: '#15233a', wallEdge: '#4a6a88',
+  },
+]
+let PAL = THEMES[0]
+function themeFor(depth) {
+  return THEMES[Math.floor((depth - 1) / 10) % THEMES.length]
+}
+
 function hash(x, y, s = 0) {
   let h = (x * 374761393 + y * 668265263 + s * 982451653) | 0
   h = Math.imul(h ^ (h >>> 13), 1274126177)
@@ -30,27 +69,27 @@ function isWall(tiles, x, y) {
 function drawFloor(ctx, tx, ty) {
   const X = tx * TILE
   const Y = ty * TILE
-  px(ctx, X, Y, 16, 16, '#363a31')
+  px(ctx, X, Y, 16, 16, PAL.floor)
   for (let i = 0; i < 2; i++) {
     for (let j = 0; j < 2; j++) {
       const v = hash(tx * 2 + i, ty * 2 + j)
-      const base = v < 0.33 ? '#535947' : v < 0.66 ? '#4c5141' : '#585e4c'
+      const base = v < 0.33 ? PAL.floorA : v < 0.66 ? PAL.floorB : PAL.floorC
       const sx = X + i * 8
       const sy = Y + j * 8
       px(ctx, sx + 1, sy + 1, 7, 7, base)
-      px(ctx, sx + 1, sy + 1, 7, 1, '#646b56')
-      px(ctx, sx + 1, sy + 7, 7, 1, '#42463a')
+      px(ctx, sx + 1, sy + 1, 7, 1, PAL.floorHi)
+      px(ctx, sx + 1, sy + 7, 7, 1, PAL.floorLo)
     }
   }
   const d = hash(tx, ty, 7)
   const ox = X + 2 + Math.floor(hash(tx, ty, 3) * 10)
   const oy = Y + 2 + Math.floor(hash(tx, ty, 5) * 9)
-  if (d < 0.12) {
+  if (PAL.grass && d < 0.12) {
     // 풀
     px(ctx, ox, oy + 2, 1, 3, '#4f8a3a')
     px(ctx, ox + 1, oy, 1, 5, '#68ad4a')
     px(ctx, ox + 2, oy + 1, 1, 4, '#4f8a3a')
-  } else if (d < 0.17) {
+  } else if (PAL.grass && d < 0.17) {
     // 꽃
     const petal = hash(tx, ty, 9) < 0.5 ? '#f4efe0' : '#e07aa0'
     px(ctx, ox + 1, oy, 1, 1, petal)
@@ -68,26 +107,26 @@ function drawWall(ctx, tiles, tx, ty) {
   const floorBelow = !isWall(tiles, tx, ty + 1)
   if (floorBelow) {
     // 바닥 쪽을 향한 벽 앞면: 벽돌
-    px(ctx, X, Y, 16, 16, '#26232e')
+    px(ctx, X, Y, 16, 16, PAL.wallFace)
     for (let r = 0; r < 4; r++) {
       const offset = r % 2 ? 4 : 0
       for (let bx = -offset; bx < 16; bx += 8) {
         const x0 = Math.max(bx + 1, 0)
         const x1 = Math.min(bx + 8, 16)
         if (x1 <= x0) continue
-        const shade = hash(tx * 4 + bx, ty * 4 + r) < 0.5 ? '#46404f' : '#3e3947'
+        const shade = hash(tx * 4 + bx, ty * 4 + r) < 0.5 ? PAL.brickA : PAL.brickB
         px(ctx, X + x0, Y + r * 4 + 1, x1 - x0, 3, shade)
-        px(ctx, X + x0, Y + r * 4 + 1, x1 - x0, 1, '#544d5e')
+        px(ctx, X + x0, Y + r * 4 + 1, x1 - x0, 1, PAL.brickHi)
       }
     }
-    px(ctx, X, Y, 16, 2, '#5d566c')
-    px(ctx, X, Y + 15, 16, 1, '#141218')
+    px(ctx, X, Y, 16, 2, PAL.wallLip)
+    px(ctx, X, Y + 15, 16, 1, PAL.wallLo)
   } else {
     // 벽 윗면
-    px(ctx, X, Y, 16, 16, '#17151d')
-    if (!isWall(tiles, tx - 1, ty)) px(ctx, X, Y, 2, 16, '#3a3546')
-    if (!isWall(tiles, tx + 1, ty)) px(ctx, X + 14, Y, 2, 16, '#3a3546')
-    if (!isWall(tiles, tx, ty - 1)) px(ctx, X, Y, 16, 2, '#3a3546')
+    px(ctx, X, Y, 16, 16, PAL.wallTop)
+    if (!isWall(tiles, tx - 1, ty)) px(ctx, X, Y, 2, 16, PAL.wallEdge)
+    if (!isWall(tiles, tx + 1, ty)) px(ctx, X + 14, Y, 2, 16, PAL.wallEdge)
+    if (!isWall(tiles, tx, ty - 1)) px(ctx, X, Y, 16, 2, PAL.wallEdge)
   }
 }
 
@@ -105,10 +144,10 @@ function drawSeal(ctx, tx, ty) {
   ctx.stroke()
 }
 
-function drawBoss(ctx, tx, ty) {
+function drawBoss(ctx, tx, ty, depth) {
   const X = tx * TILE
   const Y = ty * TILE
-  const sprite = getSprite('boss')
+  const sprite = getSprite(bossSpriteName(depth))
   const scale = 1.5
   const w = sprite.width * scale
   const h = sprite.height * scale
@@ -137,10 +176,10 @@ function drawStairs(ctx, tx, ty) {
   ctx.strokeRect(X + 0.5, Y + 0.5, 15, 15)
 }
 
-function drawEntity(ctx, name, tx, ty) {
+function drawEntity(ctx, name, tx, ty, tint) {
   const X = tx * TILE
   const Y = ty * TILE
-  const sprite = getSprite(name)
+  const sprite = getSprite(name, tint)
   ctx.fillStyle = 'rgba(0,0,0,0.4)'
   ctx.beginPath()
   ctx.ellipse(X + 8, Y + 14.5, 5, 1.8, 0, 0, Math.PI * 2)
@@ -228,6 +267,7 @@ function drawMinimap(ctx, game) {
 }
 
 export function render(ctx, game, view = {}) {
+  PAL = themeFor(game.depth)
   ctx.setTransform(RENDER_SCALE, 0, 0, RENDER_SCALE, 0, 0)
   ctx.imageSmoothingEnabled = false
   px(ctx, 0, 0, VIEW_W * TILE, VIEW_H * TILE, '#07060a')
@@ -283,8 +323,8 @@ export function render(ctx, game, view = {}) {
     if (!visible[m.y][m.x]) continue
     // 몬스터도 이전 칸에서 미끄러져 온다
     const mv = (view.monsters && view.monsters.get(m.id)) || m
-    if (m.boss) drawBoss(ctx, mv.x, mv.y)
-    else drawEntity(ctx, MONSTER_SPRITE[m.ch], mv.x, mv.y)
+    if (m.boss) drawBoss(ctx, mv.x, mv.y, game.depth)
+    else drawEntity(ctx, m.sprite || MONSTER_SPRITE[m.ch], mv.x, mv.y, monsterTint(game.depth))
     if (!m.boss && m.hp < m.maxHp) {
       px(ctx, mv.x * TILE + 2, mv.y * TILE - 1, 12, 2, '#3a0d0d')
       px(ctx, mv.x * TILE + 2, mv.y * TILE - 1, Math.max(1, Math.round((12 * m.hp) / m.maxHp)), 2, '#e83b3b')

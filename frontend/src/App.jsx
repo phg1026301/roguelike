@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import './App.css'
-import { newGame, move, wait, drinkPotion, score, chooseCard, CARDS, xpToNext, chestChoose, shopBuy, shopClose, fire, CLASSES, CLASS_IDS } from './game/engine'
+import { newGame, move, wait, drinkPotion, score, chooseCard, CARDS, xpToNext, chestChoose, shopBuy, shopClose, fire, CLASSES, CLASS_IDS, setDifficulty, DIFFICULTIES, DIFFICULTY_IDS } from './game/engine'
 import { spriteUrl } from './game/sprites'
 import { RARITY, SLOTS, describeItem, coinTotal, formatPrice } from './game/items'
 import { itemIconUrl } from './game/itemSprites'
@@ -111,10 +111,13 @@ function viewAt(now, game, anim, shake) {
   return { view, busy }
 }
 
+// 난이도 버튼 색 (CSS의 d-easy 등과 맞춘다)
+const DIFF_CLASS = { 쉬움: 'easy', 보통: 'normal', 어려움: 'hard', 지옥: 'hell' }
+
 // 숫자키: 지금 떠 있는 선택 창에 맞게 처리 (레벨업 > 상자 > 상점)
 function pickClass(g, index) {
   const cls = CLASS_IDS[index]
-  return cls ? newGame(cls) : g
+  return cls ? newGame(cls, { difficulty: g.difficulty }) : g
 }
 
 function pressNumber(g, index) {
@@ -444,7 +447,7 @@ function App() {
             </div>
           </div>
 
-          <div className="floor-badge">B{game.depth}</div>
+          <div className="floor-badge">지하 {game.depth}층</div>
 
           {game.shopOpen && game.npc && !game.over && (
             <div className="overlay shop">
@@ -566,6 +569,19 @@ function App() {
             <div className="overlay class-select">
               <h2>직업 선택</h2>
               <p className="sub">카드를 클릭하거나 키보드 <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> 으로 선택하세요</p>
+              <div className="difficulty-row">
+                <span>난이도</span>
+                {DIFFICULTY_IDS.map((name) => (
+                  <button
+                    key={name}
+                    className={`diff-btn d-${DIFF_CLASS[name]} ${game.difficulty === name ? 'on' : ''}`}
+                    onClick={() => setGame((g) => setDifficulty(g, name))}
+                  >
+                    {name}
+                  </button>
+                ))}
+              </div>
+              <p className="diff-desc">{DIFFICULTIES[game.difficulty].desc}</p>
               <div className="cards">
                 {CLASS_IDS.map((id, i) => (
                   <ClassCard key={id} id={id} index={i} onPick={() => setGame((g) => pickClass(g, i))} />
@@ -661,7 +677,8 @@ function App() {
           </div>
 
           <div className="panel stats">
-            <div><span>층</span><b>B{game.depth}</b></div>
+            <div><span>층</span><b>지하 {game.depth}층</b></div>
+            <div><span>난이도</span><b>{game.difficulty}</b></div>
             <div><span>처치</span><b>{game.kills}</b></div>
             <div><span>점수</span><b className="gold">{score(game)}</b></div>
           </div>
@@ -686,7 +703,7 @@ function App() {
                       {r.nickname}
                     </span>
                     <span className="pts">{r.score}</span>
-                    <span className="meta">B{r.depth}</span>
+                    <span className="meta">지하 {r.depth}층</span>
                   </li>
                 ))}
               </ol>

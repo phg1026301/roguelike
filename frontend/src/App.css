@@ -54,10 +54,12 @@ main {
   position: absolute;
   top: 10px;
   left: 10px;
-  padding: 6px 10px;
-  font-family: 'Press Start 2P', monospace;
-  font-size: 11px;
+  padding: 6px 12px;
+  font-family: "Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+  font-size: 20px;
+  font-weight: 900;
   color: #f0c060;
+  text-shadow: 2px 2px 0 #000;
   background: rgba(20, 14, 30, 0.8);
   border: 2px solid #5b3f7a;
   border-radius: 6px;
@@ -817,3 +819,18 @@ button.kakao:disabled { opacity: 0.6; cursor: wait; }
 }
 .current-box .current-equip { margin-top: 0; }
 .current-stats { font-size: 12px; color: #c9c0d8; line-height: 1.4; text-align: center; }
+
+/* 난이도 선택 */
+.difficulty-row { display: flex; align-items: center; justify-content: center; gap: 8px; flex-wrap: wrap; margin: 8px 0 2px; }
+.difficulty-row > span { color: #8a8296; font-size: 13px; }
+.diff-btn {
+  font-family: inherit; font-size: 14px; font-weight: 900; color: #d8d0e6;
+  background: #1b1424; border: 2px solid #3d2b52; border-radius: 8px; padding: 6px 12px; cursor: pointer;
+}
+.diff-btn.d-easy { --dc: #7dff9a; }
+.diff-btn.d-normal { --dc: #7fd3ff; }
+.diff-btn.d-hard { --dc: #ffb35c; }
+.diff-btn.d-hell { --dc: #ff4a5a; }
+.diff-btn { border-color: var(--dc, #3d2b52); }
+.diff-btn.on { background: var(--dc); color: #120d1a; }
+.diff-desc { font-size: 13px; color: #c9c0d8; margin: 4px 0 0; }

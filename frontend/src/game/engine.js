@@ -6,6 +6,20 @@ export const BASE_VIEW = 7
 const POTION_HEAL = 8
 const BOSS_EVERY = 5 // 몇 층마다 보스가 나오는지
 const BOSS_SCORE = 500
+// 난이도: 몬스터와 보스의 체력, 공격력, 경험치 배율 (시작 화면에서 고른다)
+export const DIFFICULTIES = {
+  쉬움: { hp: 0.7, atk: 0.7, xp: 0.8, desc: '몬스터가 약하다. 처음이라면 여기서 시작하세요' },
+  보통: { hp: 1, atk: 1, xp: 1, desc: '기본 난이도' },
+  어려움: { hp: 1.3, atk: 1.3, xp: 1.2, desc: '몬스터가 강하다. 포션과 장비를 잘 챙기세요' },
+  지옥: { hp: 1.7, atk: 1.6, xp: 1.5, desc: '살아남기 어렵다. 실력자용' },
+}
+export const DIFFICULTY_IDS = Object.keys(DIFFICULTIES)
+function diffOf(name) {
+  return DIFFICULTIES[name] || DIFFICULTIES.보통
+}
+function scale(v, m) {
+  return Math.max(1, Math.round(v * m))
+}
 const CHASE_MEMORY = 4 // 시야에서 놓친 뒤 몇 턴 더 쫓아오는지
 const TRAP_CHANCE = 0.3 // 상자를 부술 때 함정 확률
 
@@ -15,6 +29,38 @@ const MONSTER_TYPES = [
   { name: '고블린', ch: 'g', hp: 6, atk: 2, speed: 0.75, xp: 6 },
   { name: '오크', ch: 'O', hp: 12, atk: 4, speed: 0.5, xp: 12 },
 ]
+
+// 10층 이후에 나오는 몬스터 (그림은 sprites.js)
+const SLIME = { name: '슬라임', ch: 's', sprite: 'slime', hp: 5, atk: 2, speed: 0.75, xp: 8 }
+const SKELETON = { name: '해골 병사', ch: 'e', sprite: 'skeleton', hp: 9, atk: 3, speed: 1, xp: 12 }
+const GOLEM = { name: '돌 골렘', ch: 'X', sprite: 'golem', hp: 18, atk: 5, speed: 0.4, xp: 20 }
+const WRAITH = { name: '유령', ch: 'w', sprite: 'wraith', hp: 10, atk: 4, speed: 1, xp: 16 }
+
+// 구간(10층 단위)별 몬스터: 1구간(10~19층), 2구간(20~29층), 3구간(30층 이후)
+const TIER_MONSTERS = [
+  [SLIME, SKELETON, MONSTER_TYPES[2]],
+  [SKELETON, GOLEM, WRAITH],
+  [GOLEM, WRAITH, MONSTER_TYPES[2]],
+]
+
+// 1~9층은 기존처럼 층이 깊어질수록 쥐 → 고블린 → 오크 순으로 나온다
+function monsterPool(depth) {
+  const tier = Math.floor((depth - 1) / 10)
+  if (tier === 0) return MONSTER_TYPES.slice(0, Math.min(MONSTER_TYPES.length, Math.floor((depth + 1) / 2) + 1))
+  return TIER_MONSTERS[Math.min(tier, TIER_MONSTERS.length) - 1]
+}
+
+// 10층 단위 보스 스테이지: 층이 깊어질수록 강한 보스
+const BOSS_STAGE_NAMES = ['폭군 오우거', '심연의 군주', '잿빛 대마왕']
+function bossStageStats(depth) {
+  const tier = Math.floor(depth / 10) // 10층 → 1
+  return {
+    name: BOSS_STAGE_NAMES[Math.min(tier - 1, BOSS_STAGE_NAMES.length - 1)],
+    hp: 50 + depth * 5,
+    atk: 5 + Math.floor(depth / 4),
+    xp: 60 + depth * 3,
+  }
+}
 
 // ===== 직업 =====
 // range 0 = 근접 전용, range > 0 = F키로 사거리 안 가장 가까운 적에게 자동 발사
@@ -169,7 +215,9 @@ function inRoom(pos, r) {
   return pos.x >= r.x && pos.x < r.x + r.w && pos.y >= r.y && pos.y < r.y + r.h
 }
 
-function buildFloor(depth, player) {
+function buildFloor(depth, player, difficulty = '보통') {
+  const diff = diffOf(difficulty)
+  if (depth % 10 === 0) return buildBossArena(depth, player, diff)
   const { tiles, rooms } = generateDungeon()
   const start = center(rooms[0])
   const stairs = center(rooms[rooms.length - 1])
@@ -178,16 +226,16 @@ function buildFloor(depth, player) {
   const taken = new Set([`${start.x},${start.y}`, `${stairs.x},${stairs.y}`])
   let monsters = []
   const items = []
-  const maxType = Math.min(MONSTER_TYPES.length - 1, Math.floor((depth + 1) / 2))
+  const pool = monsterPool(depth)
 
   rooms.slice(1).forEach((room) => {
     const count = randInt(0, 1 + Math.floor(depth / 2))
     for (let i = 0; i < count; i++) {
       const pos = randomFloorIn(room, taken)
       if (!pos) continue
-      const t = MONSTER_TYPES[randInt(0, maxType)]
-      const hp = t.hp + (depth - 1)
-      monsters.push({ id: nextId++, ...t, ...pos, hp, maxHp: hp, atk: t.atk + Math.floor((depth - 1) / 2), xp: t.xp + (depth - 1) })
+      const t = pool[randInt(0, pool.length - 1)]
+      const hp = scale(t.hp + (depth - 1), diff.hp)
+      monsters.push({ id: nextId++, ...t, ...pos, hp, maxHp: hp, atk: scale(t.atk + Math.floor((depth - 1) / 2), diff.atk), xp: scale(t.xp + (depth - 1), diff.xp) })
     }
     if (Math.random() < 0.4) {
       const pos = randomFloorIn(room, taken)
@@ -217,26 +265,48 @@ function buildFloor(depth, player) {
     npc = { ...pos, stock: makeShopStock() }
   }
 
-  // 보스 층: 계단 바로 옆에서 계단을 지킨다
+  // 보스 층 (5층마다): 계단 앞 보스방의 일반 몬스터를 치우고 중간 보스를 세운다
   if (depth % BOSS_EVERY === 0) {
+    const bossRoom = rooms[rooms.length - 1]
     const spots = [[-1, 0], [1, 0], [0, -1], [0, 1]]
       .map(([dx, dy]) => ({ x: stairs.x + dx, y: stairs.y + dy }))
       .filter((pos) => tiles[pos.y][pos.x] !== '#')
     const pos = spots[0] || stairs
-    monsters = monsters.filter((m) => !(m.x === pos.x && m.y === pos.y))
-    const hp = 34 + depth * 6
-    monsters.push({
-      id: nextId++, name: '오우거 군주', ch: 'B', boss: true, ...pos,
-      hp, maxHp: hp, atk: 4 + Math.floor(depth / 2), speed: 0.6, xp: 40 + depth * 4,
-      cooldown: 2, windup: false, summoned: false,
-    })
+    monsters = monsters.filter((m) => !inRoom(m, bossRoom))
+    monsters.push(makeBoss(pos, { name: '오우거 군주', hp: 34 + depth * 6, atk: 4 + Math.floor(depth / 2), xp: 40 + depth * 4 }, diff))
   }
 
   const explored = Array.from({ length: H }, () => Array(W).fill(false))
   return { tiles, monsters, items, npc, explored, player: { ...player, ...start } }
 }
 
-export function newGame(cls = 'mage', { picking = false } = {}) {
+function makeBoss(pos, stats, diff) {
+  const hp = scale(stats.hp, diff.hp)
+  return {
+    id: nextId++, ch: 'B', boss: true, ...pos, name: stats.name,
+    hp, maxHp: hp, atk: scale(stats.atk, diff.atk), speed: 0.6, xp: scale(stats.xp, diff.xp),
+    cooldown: 2, windup: false, summoned: false,
+  }
+}
+
+// 보스 스테이지: 미로 없이 보스방 하나만 있다. 보스를 쓰러뜨려야 계단이 열린다
+function buildBossArena(depth, player, diff) {
+  const tiles = Array.from({ length: H }, () => Array(W).fill('#'))
+  const room = { x: 3, y: 4, w: 34, h: 14 }
+  for (let y = room.y; y < room.y + room.h; y++) {
+    for (let x = room.x; x < room.x + room.w; x++) tiles[y][x] = '.'
+  }
+  const start = { x: room.x + 2, y: room.y + Math.floor(room.h / 2) }
+  const stairs = { x: room.x + room.w - 2, y: room.y + Math.floor(room.h / 2) }
+  tiles[stairs.y][stairs.x] = '>'
+  const bossPos = { x: stairs.x - 1, y: stairs.y }
+  const items = [{ id: nextId++, kind: 'potion', x: start.x + 4, y: start.y - 2 }]
+  const monsters = [makeBoss(bossPos, bossStageStats(depth), diff)]
+  const explored = Array.from({ length: H }, () => Array(W).fill(false))
+  return { tiles, monsters, items, npc: null, explored, player: { ...player, ...start } }
+}
+
+export function newGame(cls = 'mage', { picking = false, difficulty = '보통' } = {}) {
   const c = CLASSES[cls] || CLASSES.mage
   const player = {
     x: 0, y: 0, hp: c.hp, maxHp: c.hp, atk: c.atk, potions: 1,
@@ -259,11 +329,12 @@ export function newGame(cls = 'mage', { picking = false } = {}) {
     chest: null, // { stage: 'choose' | 'loot', itemId, loot }
     shopOpen: false,
     picking,
+    difficulty: DIFFICULTIES[difficulty] ? difficulty : '보통',
     messages: [
       `${c.icon} ${c.name}(으)로 던전에 들어왔다. 계단(>)을 찾아 내려가자!`,
       ...(c.range ? [`F키: 사거리 ${c.range}칸 안의 가장 가까운 적에게 ${c.attackDesc}`] : []),
     ],
-    ...buildFloor(1, player),
+    ...buildFloor(1, player, difficulty),
   }
   return updateFov(state)
 }
@@ -462,8 +533,9 @@ function summonMinions(state, boss) {
     if (state.tiles[y][x] === '#' || monsterAt(state, x, y) || npcAt(state, x, y)) continue
     if (x === state.player.x && y === state.player.y) continue
     const t = MONSTER_TYPES[1]
-    const hp = t.hp + state.depth - 1
-    state.monsters.push({ id: nextId++, ...t, x, y, hp, maxHp: hp, atk: t.atk + Math.floor(state.depth / 3), xp: t.xp, alert: CHASE_MEMORY })
+    const diff = diffOf(state.difficulty)
+    const hp = scale(t.hp + state.depth - 1, diff.hp)
+    state.monsters.push({ id: nextId++, ...t, x, y, hp, maxHp: hp, atk: scale(t.atk + Math.floor(state.depth / 3), diff.atk), xp: t.xp, alert: CHASE_MEMORY })
     count += 1
   }
   if (count > 0) log(state, `${boss.name}가 부하를 불렀다!`)
@@ -586,7 +658,7 @@ export function move(prev, dx, dy) {
     p.maxHp += 2
     p.hp = Math.min(p.maxHp, p.hp + 4)
     if (state.depth % 2 === 1) p.atk += 1
-    Object.assign(state, buildFloor(state.depth, p))
+    Object.assign(state, buildFloor(state.depth, p, state.difficulty))
     log(state, `지하 ${state.depth}층으로 내려왔다. 조금 더 강해진 느낌이다.`)
     if (state.depth % BOSS_EVERY === 0) log(state, '⚠ 강력한 보스의 기운이 느껴진다... 계단을 지키고 있다!')
     if (state.npc) log(state, '🛒 어딘가에서 상인의 목소리가 들린다. 상인에게 다가가면 거래할 수 있다.')
@@ -734,4 +806,10 @@ export function shopBuy(prev, index) {
 export function shopClose(prev) {
   if (!prev.shopOpen) return prev
   return { ...prev, shopOpen: false }
+}
+
+// 난이도 고르기 (시작 화면에서만 바꿀 수 있다)
+export function setDifficulty(prev, name) {
+  if (!prev.picking || !DIFFICULTIES[name]) return prev
+  return { ...prev, difficulty: name }
 }
