@@ -7,6 +7,8 @@ import { itemIconUrl } from './game/itemSprites'
 import { render, TILE, VIEW_W, VIEW_H, RENDER_SCALE } from './game/renderer'
 import { api, loadAuth, saveAuth, clearAuth, savePendingRun, takePendingRun, runFromGame } from './api'
 import { playSound, unlockSound, toggleMute, isMuted } from './game/sound'
+import { TitleScreen, SelectScreen } from './Hub'
+import TowerGame from './tower/TowerGame'
 
 // 조작 명령: 키보드와 터치 버튼이 같은 동작을 하게 한다
 const COMMANDS = {
@@ -272,7 +274,8 @@ function ItemCard({ item, current, onClick, hotkey }) {
 let kakaoCallbackHandled = false
 const savedGames = new WeakSet()
 
-function App() {
+// 로그라이크 게임 화면 (onExit: 게임 선택 화면으로 돌아간다)
+function Roguelike({ onExit }) {
   const [game, setGame] = useState(() => newGame('mage', { picking: true }))
   const [server, setServer] = useState('확인 중')
   const [auth, setAuth] = useState(loadAuth)
@@ -453,7 +456,10 @@ function App() {
   return (
     <div className="app">
       <header>
-        <h1>ROGUELIKE</h1>
+        <div className="tw-head-left">
+          <button className="back-btn" onClick={onExit}>← 게임 선택</button>
+          <h1>ROGUELIKE</h1>
+        </div>
         <div className="header-right">
           <button className="mute-btn" onClick={() => setMuted(toggleMute())} title="효과음 켜기/끄기 (M)">{muted ? '🔇' : '🔊'}</button>
           <span className={`server ${server === '연결됨' ? 'ok' : ''}`}>● 서버 {server}</span>
@@ -807,6 +813,20 @@ function App() {
       </main>
     </div>
   )
+}
+
+// 시작 화면 순서: 제목 → 게임 선택 → 게임
+// 카카오 로그인 후 돌아오는 주소(/oauth/kakao)는 바로 로그라이크 화면으로 간다
+function App() {
+  const [screen, setScreen] = useState(() => (window.location.pathname === '/oauth/kakao' ? 'roguelike' : 'title'))
+  const toSelect = useCallback(() => setScreen('select'), [])
+  const toTitle = useCallback(() => setScreen('title'), [])
+  const pick = useCallback((id) => setScreen(id), [])
+
+  if (screen === 'title') return <TitleScreen onStart={toSelect} />
+  if (screen === 'select') return <SelectScreen onPick={pick} onBack={toTitle} />
+  if (screen === 'tower') return <TowerGame onExit={toSelect} />
+  return <Roguelike onExit={toSelect} />
 }
 
 export default App
