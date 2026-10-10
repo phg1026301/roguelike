@@ -1,0 +1,141 @@
+/* 네온 시티: 사이버펑크 선택형 이야기 */
+.story-app {
+  min-height: 100vh;
+  padding: 16px;
+  box-sizing: border-box;
+  color: #e8f6ff;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  transition: background 0.6s;
+}
+.story-app * { box-sizing: border-box; }
+
+/* 장면마다 분위기 색 */
+.bg-rain { background: linear-gradient(#0b0e1f, #1c1036 60%, #2a0f3a); }
+.bg-tower { background: linear-gradient(#0a1a2a, #102a44 60%, #0a2030); }
+.bg-alarm { background: linear-gradient(#2a0608, #4a0c12 60%, #1a0408); }
+.bg-alley { background: linear-gradient(#141018, #2a1a24 60%, #0e0c12); }
+.bg-vault { background: linear-gradient(#06202a, #0a3a4a 60%, #051a20); }
+.bg-neon { background: linear-gradient(#1a0628, #3a0c4a 50%, #0a1a3a); }
+
+.st-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  max-width: 960px;
+  width: 100%;
+  margin: 0 auto;
+}
+.st-head h1 {
+  margin: 0;
+  font-family: 'Press Start 2P', monospace;
+  font-size: 18px;
+  color: #5ee6ff;
+  text-shadow: 0 0 10px #5ee6ff;
+}
+.st-stats {
+  display: flex;
+  gap: 14px;
+  margin-left: auto;
+  flex-wrap: wrap;
+  font-size: 13px;
+  color: #b7d8e8;
+}
+.st-stats b { color: #ffd447; }
+
+.st-stage {
+  position: relative;
+  max-width: 960px;
+  width: 100%;
+  margin: 0 auto;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 12px;
+  min-height: 360px;
+}
+.st-scene-tag {
+  align-self: flex-start;
+  font-size: 12px;
+  letter-spacing: 1px;
+  color: #ff5ac8;
+  border: 1px solid #ff5ac8;
+  border-radius: 4px;
+  padding: 2px 8px;
+}
+.st-dice {
+  align-self: flex-start;
+  font-size: 14px;
+  color: #ffd447;
+}
+.st-box {
+  background: rgba(8, 10, 22, 0.86);
+  border: 2px solid #5ee6ff;
+  border-radius: 14px;
+  padding: 18px 22px 22px;
+  box-shadow: 0 0 22px rgba(94, 230, 255, 0.25);
+  cursor: pointer;
+  min-height: 150px;
+}
+.st-speaker {
+  font-weight: bold;
+  color: #ff5ac8;
+  margin-bottom: 6px;
+  font-size: 15px;
+}
+.st-text {
+  margin: 0;
+  font-size: 17px;
+  line-height: 1.75;
+  white-space: pre-wrap;
+}
+.st-next { display: block; margin-top: 10px; font-size: 12px; color: #6fa8c0; text-align: right; }
+
+.st-choices { display: flex; flex-direction: column; gap: 8px; }
+.st-choice {
+  text-align: left;
+  background: #0d1424;
+  color: #e8f6ff;
+  border: 1px solid #3a6f8a;
+  border-radius: 10px;
+  padding: 12px 14px;
+  font: inherit;
+  font-size: 15px;
+  cursor: pointer;
+}
+.st-choice:hover { border-color: #5ee6ff; background: #142038; }
+.st-choice kbd {
+  display: inline-block;
+  min-width: 22px;
+  padding: 0 6px;
+  margin-right: 6px;
+  border: 1px solid #4a8aa8;
+  border-radius: 4px;
+  font-size: 12px;
+  text-align: center;
+}
+.st-hint { font-size: 12px; color: #6fa8c0; text-align: center; }
+
+.st-footer {
+  max-width: 960px;
+  width: 100%;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: #6fa8c0;
+}
+.st-ghost {
+  background: transparent;
+  color: #5ee6ff;
+  border: 1px solid #5ee6ff;
+  border-radius: 6px;
+  padding: 4px 10px;
+  font: inherit;
+  cursor: pointer;
+}

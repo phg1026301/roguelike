@@ -1,0 +1,57 @@
+/* 탄환 소년 화면 */
+.shooter-app {
+  min-height: 100vh;
+  padding: 16px;
+  box-sizing: border-box;
+  color: #2a1d17;
+  background: #17241c;
+}
+.shooter-app * { box-sizing: border-box; }
+.sh-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  max-width: 960px;
+  margin: 0 auto 12px;
+  flex-wrap: wrap;
+}
+.sh-head h1 {
+  margin: 0;
+  font-family: 'Press Start 2P', monospace;
+  font-size: 20px;
+  color: #ffd447;
+  text-shadow: 3px 3px 0 #6b4a2b;
+}
+.sh-best { margin-left: auto; color: #ddd; font-size: 14px; }
+.sh-best b { color: #ffd447; }
+.sh-wrap { max-width: 960px; margin: 0 auto; }
+.sh-canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 14px;
+  border: 4px solid #2a1d17;
+  background: #9ad86f;
+  cursor: crosshair;
+  touch-action: none;
+}
+.sh-help {
+  max-width: 960px;
+  margin: 12px auto 0;
+  color: #cfd8cf;
+  font-size: 13px;
+  line-height: 1.7;
+}
+.sh-help kbd {
+  display: inline-block;
+  min-width: 22px;
+  padding: 1px 6px;
+  margin: 0 1px;
+  border: 1px solid #4a6b58;
+  border-bottom-width: 3px;
+  border-radius: 4px;
+  background: #0f1a14;
+  color: #eee;
+  text-align: center;
+  font-size: 12px;
+}
