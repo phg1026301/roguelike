@@ -6,7 +6,7 @@ import { RARITY, SLOTS, describeItem, coinTotal, formatPrice } from './game/item
 import { itemIconUrl } from './game/itemSprites'
 import { render, TILE, VIEW_W, VIEW_H, RENDER_SCALE } from './game/renderer'
 import { api, loadAuth, saveAuth, clearAuth, savePendingRun, takePendingRun, runFromGame } from './api'
-import { playSound, unlockSound, toggleMute, isMuted } from './game/sound'
+import { playSound, unlockSound, toggleMute, isMuted, startMusic, stopMusic } from './game/sound'
 import { TitleScreen, SelectScreen } from './Hub'
 import TowerGame from './tower/TowerGame'
 import CardGame from './cards/CardGame'
@@ -279,6 +279,12 @@ const savedGames = new WeakSet()
 function Roguelike({ onExit }) {
   const [game, setGame] = useState(() => newGame('mage', { picking: true }))
   const [server, setServer] = useState('확인 중')
+  // 배경음악: 던전은 던전 테마, 10층 보스방에서는 보스 전용 테마
+  const bossRoom = game.depth % 10 === 0 && (game.monsters || []).some((m) => m.boss)
+  useEffect(() => {
+    startMusic(bossRoom ? 'boss' : 'dungeon')
+  }, [bossRoom])
+  useEffect(() => () => stopMusic(), [])
   const [auth, setAuth] = useState(loadAuth)
   const [ranking, setRanking] = useState([])
   const [rankTab, setRankTab] = useState('전체')

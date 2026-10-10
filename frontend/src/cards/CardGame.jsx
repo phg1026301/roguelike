@@ -15,6 +15,28 @@ function kwNames(card) {
   return (card.kw || []).map((k) => KEYWORDS[k]).join(' · ')
 }
 
+// 덱 만들기: 카드 종류별 묶음과 탭
+const GROUPS = [
+  { type: 'minion', title: '🐾 소환 카드 · 하수인을 전장에 세워 싸워요' },
+  { type: 'spell', title: '✨ 마법 카드 · 한 번 써서 효과를 발동해요' },
+]
+const TABS = [
+  { key: 'all', label: '전체' },
+  { key: 'minion', label: '소환 카드' },
+  { key: 'spell', label: '마법 카드' },
+]
+function countType(ids, type) {
+  return ids.filter((id) => cardById(id)?.type === type).length
+}
+
+// 카드 그림: 하수인은 캐릭터 그림, 마법은 큰 아이콘
+function CardArt({ card }) {
+  if (card.type === 'minion') {
+    return <img className="pixel-icon cg-art-img" src={spriteUrl(card.sprite)} width={64} height={64} alt="" />
+  }
+  return <span className="cg-art-spell" aria-hidden="true">{card.icon}</span>
+}
+
 // 효과 숫자: 피해, 회복, 방패 막음, SLAM
 function Floats({ events }) {
   return events.map((e, i) => {
@@ -96,7 +118,10 @@ function PoolCard({ card, on, onClick }) {
   return (
     <button className={`cg-pool-card ${card.type} ${on ? 'on' : ''}`} onClick={onClick}>
       <span className="cg-cost">{card.cost}</span>
+      {on && <span className="cg-picked">✓</span>}
+      <CardArt card={card} />
       <span className="cg-pool-name">{card.name}</span>
+      <span className={`cg-kind ${card.type}`}>{card.type === 'minion' ? '하수인' : '마법'}</span>
       <span className="cg-card-text">
         {card.type === 'minion' ? `⚔${card.atk} ❤${card.hp}` : card.text}
       </span>
@@ -109,6 +134,7 @@ export default function CardGame({ onExit }) {
   const [phase, setPhase] = useState('build') // build: 덱 만들기 · play: 대결
   const [level, setLevel] = useState('보통')
   const [buildIds, setBuildIds] = useState(() => recommendedDeck())
+  const [buildTab, setBuildTab] = useState('all') // all | minion | spell
   const [runIds, setRunIds] = useState([])
   const [streak, setStreak] = useState(0)
   const [rewards, setRewards] = useState(null)
@@ -213,7 +239,7 @@ export default function CardGame({ onExit }) {
           <div className="panel cg-build-top">
             <div>
               <b className="cg-build-title">덱 만들기</b>
-              <p className="cg-build-sub">카드 {buildIds.length} / {DECK_SIZE}장 · 카드를 눌러 넣고 빼세요 · 덱을 완성해야 시작할 수 있어요</p>
+              <p className="cg-build-sub">카드 {buildIds.length} / {DECK_SIZE}장 (소환 {countType(buildIds, 'minion')} · 마법 {countType(buildIds, 'spell')}) · 카드를 눌러 넣고 빼세요 · 덱을 완성해야 시작할 수 있어요</p>
               <p className="cg-build-sub">난이도 {level}: {DIFFICULTIES[level].desc}</p>
             </div>
             <div className="cg-build-actions">
@@ -223,11 +249,44 @@ export default function CardGame({ onExit }) {
               </button>
             </div>
           </div>
-          <div className="cg-pool">
-            {CARD_POOL.map((c) => (
-              <PoolCard key={c.id} card={c} on={buildIds.includes(c.id)} onClick={() => toggleBuild(c.id)} />
+          <div className="cg-tabs">
+            {TABS.map((t) => (
+              <button key={t.key} className={`cg-tab ${buildTab === t.key ? 'on' : ''}`} onClick={() => setBuildTab(t.key)}>
+                {t.label} <small>{t.key === 'all' ? buildIds.length : countType(buildIds, t.key)}</small>
+              </button>
             ))}
           </div>
+
+          <div className="cg-strip" aria-label="내 덱">
+            {Array.from({ length: DECK_SIZE }, (_, i) => {
+              const id = buildIds[i]
+              const c = id ? cardById(id) : null
+              return (
+                <button
+                  key={i}
+                  className={`cg-slot ${c ? c.type : 'empty'}`}
+                  disabled={!c}
+                  title={c ? `${c.name} · 눌러서 빼기` : '빈 칸'}
+                  onClick={() => c && toggleBuild(id)}
+                >
+                  {c && (c.type === 'minion'
+                    ? <img className="pixel-icon" src={spriteUrl(c.sprite)} width={28} height={28} alt="" />
+                    : <span aria-hidden="true">{c.icon}</span>)}
+                </button>
+              )
+            })}
+          </div>
+
+          {GROUPS.filter((g) => buildTab === 'all' || buildTab === g.type).map((g) => (
+            <section key={g.type} className="cg-group">
+              <h3 className="cg-group-title">{g.title}</h3>
+              <div className="cg-pool">
+                {CARD_POOL.filter((c) => c.type === g.type).map((c) => (
+                  <PoolCard key={c.id} card={c} on={buildIds.includes(c.id)} onClick={() => toggleBuild(c.id)} />
+                ))}
+              </div>
+            </section>
+          ))}
         </main>
       </div>
     )

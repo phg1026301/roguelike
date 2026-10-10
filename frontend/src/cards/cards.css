@@ -409,3 +409,81 @@
   30% { opacity: 1; transform: translateX(-50%) scale(1); }
   100% { opacity: 0; transform: translateX(-50%) translateY(-20px) scale(1); }
 }
+
+/* 덱 만들기: 종류 탭 · 덱 줄 · 카드 그림 */
+.cg-tabs { display: flex; gap: 8px; flex-wrap: wrap; }
+.cg-tab {
+  background: #1d1628;
+  color: #cfc4e6;
+  border: 1px solid #4a3b63;
+  border-radius: 999px;
+  padding: 6px 14px;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.cg-tab small { color: #f0c060; font-weight: 700; margin-left: 2px; }
+.cg-tab.on { background: #c58bff; color: #1a0f26; border-color: #c58bff; font-weight: 700; }
+.cg-tab.on small { color: #1a0f26; }
+
+.cg-strip {
+  display: grid;
+  grid-template-columns: repeat(10, 1fr);
+  gap: 6px;
+  padding: 8px;
+  background: #140f1f;
+  border: 1px solid #3a2d52;
+  border-radius: 10px;
+}
+.cg-slot {
+  aspect-ratio: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  background: #1f1830;
+  border: 2px solid #3a2d52;
+  border-radius: 6px;
+  padding: 0;
+  cursor: pointer;
+}
+.cg-slot.empty { background: #17121f; border-style: dashed; cursor: default; }
+.cg-slot.minion { border-color: #7fd3ff; }
+.cg-slot.spell { border-color: #7fe39a; }
+.cg-slot:not(:disabled):hover { border-color: #f0c060; }
+
+.cg-group { display: flex; flex-direction: column; gap: 8px; }
+.cg-group-title { margin: 6px 0 0; font-size: 15px; color: #e8dcff; }
+
+.cg-pool-card { min-height: 190px; padding-top: 22px; }
+.cg-art-img { image-rendering: pixelated; margin: 2px 0; }
+.cg-art-spell {
+  font-size: 40px;
+  line-height: 1;
+  margin: 6px 0 2px;
+  filter: drop-shadow(0 0 6px rgba(127, 227, 154, 0.5));
+}
+.cg-kind {
+  font-size: 11px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  color: #1a0f26;
+  font-weight: 700;
+}
+.cg-kind.minion { background: #7fd3ff; }
+.cg-kind.spell { background: #7fe39a; }
+.cg-picked {
+  position: absolute;
+  top: 4px;
+  right: 6px;
+  color: #c58bff;
+  font-weight: 700;
+  font-size: 16px;
+}
+.cg-pool-card.minion.on { border-color: #7fd3ff; box-shadow: 0 0 12px rgba(127, 211, 255, 0.5); }
+.cg-pool-card.spell.on { border-color: #7fe39a; box-shadow: 0 0 12px rgba(127, 227, 154, 0.5); }
+
+/* 덱 만들기 블록은 화면 폭을 모두 쓴다 (묶음이 좁아져 카드가 한 줄로 쌓이는 것 방지) */
+.cg-build > * { width: 100%; box-sizing: border-box; }
+.cg-tabs, .cg-strip, .cg-group { width: 100%; }
