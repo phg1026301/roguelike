@@ -268,8 +268,14 @@ function startAttack(w, step) {
     p.fx = Math.cos(a)
     p.fy = Math.sin(a)
   }
-  // 목표가 있을 때만 앞으로 밀고 들어간다 (빈 공간에서 연타해도 캐릭터가 떠밀리지 않게)
-  p.atk = { step, t: 0, hit: new Set(), queued: false, lunge: target ? 1 : 0 }
+  // 돌진 거리: 적과의 거리에 맞춰 조금만 붙는다. 적 앞에서 멈추고, 최대 거리도 줄였다
+  let lunge = 0
+  if (target) {
+    const A = ATTACKS[step - 1]
+    const d = Math.hypot(target.x - p.x, target.y - p.y)
+    lunge = clamp(d - A.range * 0.7, 0, A.lunge * 0.6)
+  }
+  p.atk = { step, t: 0, hit: new Set(), queued: false, lunge }
   p.lastStep = step
 }
 
@@ -812,8 +818,8 @@ export function update(w, dt, input) {
     const A = ATTACKS[p.atk.step - 1]
     const prev = p.atk.t
     p.atk.t += dt
-    if (p.atk.t >= A.from && p.atk.t <= A.to && p.atk.lunge) {
-      const v = A.lunge / (A.to - A.from)
+    if (p.atk.t >= A.from && p.atk.t <= A.to && p.atk.lunge > 0) {
+      const v = p.atk.lunge / (A.to - A.from)
       moveBody(w, p, p.fx * v * dt, p.fy * v * dt)
     }
     if (prev < A.from && p.atk.t >= A.from) {
