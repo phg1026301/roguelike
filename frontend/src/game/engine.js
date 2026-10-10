@@ -85,7 +85,7 @@ export const CLASSES = {
     name: '마법사', icon: '🔮', sprite: 'player', color: '#b98aff',
     hp: 16, atk: 4, def: 0, crit: 0, range: 5,
     attackDesc: '마법탄 발사',
-    traitName: '마나 폭발', traitDesc: '원거리 공격 5번째마다 맞은 적 주변에 폭발 피해',
+    traitName: '화염 주문', traitDesc: '원거리 공격마다 맞은 적에게 불을 붙여 2턴 동안 지속 피해',
     summary: '몸은 약하지만 멀리서 강력한 마법을 퍼붓는다',
   },
   archer: {
@@ -696,6 +696,18 @@ function summonMinions(state, boss) {
 function endTurn(prevState, fledFrom = []) {
   const state = updateFov(prevState) // 몬스터는 플레이어의 '현재' 위치 기준으로 판단
   const p = state.player
+  // 불타는 적: 매 턴 지속 피해 (화염 주문)
+  for (const m of [...state.monsters]) {
+    if (!m.burn || m.dead) continue
+    m.hp -= m.burn.dmg
+    state.fx.push({ x: m.x, y: m.y, kind: 'fire', text: `${m.burn.dmg}` })
+    m.burn.turns -= 1
+    if (m.burn.turns <= 0) m.burn = null
+    if (m.hp <= 0) {
+      log(state, `🔥 ${m.name}이(가) 불에 타 쓰러졌다!`)
+      killMonster(state, m)
+    }
+  }
   monstersAct(state)
   petAct(state)
   if (state.summonCd > 0) state.summonCd -= 1
@@ -728,20 +740,12 @@ function attack(state, target, ranged = false) {
   // big: 보스를 맞힌 타격 (화면 흔들림을 더 세게)
   state.fx.push({ x: target.x, y: target.y, kind: isCrit ? 'crit' : 'hit', text: `${dmg}`, big: Boolean(target.boss) })
   if (isCrit) log(state, '💜 치명타!')
-  // 마법사 마나 폭발: 원거리 공격 5번째마다
-  if (p.cls === 'mage' && ranged) {
-    p.shots += 1
-    if (p.shots % 5 === 0) {
-      const blast = Math.ceil(p.atk / 2) + 1
-      const around = state.monsters.filter((m) => m !== target && !m.dead && Math.abs(m.x - target.x) <= 1 && Math.abs(m.y - target.y) <= 1)
-      state.fx.push({ x: target.x, y: target.y, kind: 'blast', text: '' })
-      log(state, `💥 마나 폭발!${around.length ? ` 주변 적 ${around.length}마리에게 ${blast} 피해` : ''}`)
-      for (const m of around) {
-        m.hp -= blast
-        state.fx.push({ x: m.x, y: m.y, kind: 'blast', text: `${blast}` })
-        if (m.hp <= 0) killMonster(state, m)
-      }
-    }
+  // 마법사 화염 주문: 원거리 공격마다 대상에게 불이 붙는다 (다시 맞으면 지속 시간만 갱신, 피해는 중첩되지 않음)
+  if (p.cls === 'mage' && ranged && !target.dead && target.hp > 0) {
+    const burnDmg = Math.max(1, Math.floor(p.atk / 4))
+    target.burn = { dmg: burnDmg, turns: 2 }
+    state.fx.push({ x: target.x, y: target.y, kind: 'fire', text: '' })
+    log(state, `🔥 화염 주문! ${target.name}에게 불이 붙었다 (2턴, 매 턴 ${burnDmg} 피해)`)
   }
   if (hasSpecial(p, 'vamp') && p.hp < p.maxHp) p.hp += 1
   if (target.boss && target.hp > 0 && !target.summoned && target.hp <= target.maxHp / 2) {
