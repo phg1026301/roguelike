@@ -14,18 +14,21 @@ const LIGHTNING_COST = 4
 const LIGHTNING_DMG = 4
 
 export const UNITS = {
-  warrior: { name: '검사', sprite: 'warrior', cost: 2, hp: 12, atk: 2, range: 1, interval: 2, unlock: 1, desc: '가까운 적을 벤다' },
-  archer: { name: '궁수', sprite: 'archer', cost: 3, hp: 6, atk: 2, range: 4, interval: 2, unlock: 2, antiAir: true, desc: '멀리서 쏜다. 하늘 적도 맞힌다' },
-  mage: { name: '마법사', sprite: 'player', cost: 4, hp: 5, atk: 3, range: 3, interval: 3, unlock: 3, antiAir: true, desc: '강한 마법. 하늘 적도 맞힌다' },
-  golem: { name: '골렘', sprite: 'golem', cost: 5, hp: 30, atk: 1, range: 1, interval: 3, unlock: 4, desc: '아주 단단해서 적을 오래 막는다' },
+  shield: { name: '방패병', cost: 2, hp: 12, atk: 2, range: 1, interval: 2, unlock: 1, desc: '방패로 막고 검으로 벤다' },
+  archer: { name: '숲 궁수', cost: 3, hp: 6, atk: 2, range: 4, interval: 2, unlock: 2, antiAir: true, desc: '멀리서 쏜다. 하늘 적도 맞힌다' },
+  spear: { name: '창병', cost: 3, hp: 8, atk: 2, range: 2, interval: 2, unlock: 2, desc: '두 칸 앞까지 찌른다' },
+  mage: { name: '마도사', cost: 4, hp: 5, atk: 3, range: 3, interval: 3, unlock: 3, antiAir: true, desc: '별빛 마법. 하늘 적도 맞힌다' },
+  healer: { name: '치유사', cost: 3, hp: 6, atk: 0, heal: 2, range: 4, interval: 3, unlock: 3, desc: '같은 길의 가장 다친 아군을 회복한다' },
+  golem: { name: '골렘', cost: 5, hp: 30, atk: 1, range: 1, interval: 3, unlock: 4, desc: '아주 단단해서 적을 오래 막는다' },
 }
-export const UNIT_ORDER = ['warrior', 'archer', 'mage', 'golem']
+export const UNIT_ORDER = ['shield', 'archer', 'spear', 'mage', 'healer', 'golem']
 
 export const ENEMIES = {
   rat: { name: '쥐', sprite: 'rat', hp: 4, atk: 1, speed: 2 },
-  goblin: { name: '고블린', sprite: 'goblin', hp: 8, atk: 2, speed: 3 },
-  orc: { name: '오크', sprite: 'orc', hp: 18, atk: 3, speed: 4 },
+  thief: { name: '도적', sprite: 'thief', hp: 3, atk: 1, speed: 1 },
+  bomber: { name: '폭탄 고블린', sprite: 'bomber', hp: 6, atk: 2, speed: 3, kamikaze: true },
   wraith: { name: '유령', sprite: 'wraith', hp: 6, atk: 2, speed: 2, air: true },
+  captain: { name: '오크 대장', sprite: 'captain', hp: 20, atk: 3, speed: 4 },
   ogre: { name: '오우거 보스', sprite: 'ogre', hp: 60, atk: 4, speed: 5, boss: true },
 }
 
@@ -36,9 +39,9 @@ export function unlockedUnits(stage) {
 function pickType(stage) {
   const r = Math.random()
   if (stage <= 1) return 'rat'
-  if (stage === 2) return r < 0.7 ? 'rat' : r < 0.9 ? 'goblin' : 'wraith'
-  if (stage === 3) return r < 0.35 ? 'goblin' : r < 0.6 ? 'orc' : r < 0.8 ? 'wraith' : 'rat'
-  return r < 0.3 ? 'orc' : r < 0.55 ? 'goblin' : r < 0.8 ? 'wraith' : 'rat'
+  if (stage === 2) return r < 0.5 ? 'rat' : r < 0.8 ? 'thief' : 'wraith'
+  if (stage === 3) return r < 0.3 ? 'thief' : r < 0.6 ? 'bomber' : r < 0.8 ? 'wraith' : 'captain'
+  return r < 0.25 ? 'captain' : r < 0.45 ? 'bomber' : r < 0.65 ? 'thief' : r < 0.85 ? 'wraith' : 'rat'
 }
 
 // 한 스테이지의 등장 목록. 3의 배수 스테이지 끝에는 보스가 나온다
@@ -78,7 +81,7 @@ export function newLaneRun() {
     units: [],
     enemies: [],
     queue: makeWave(stage),
-    selected: 'warrior',
+    selected: 'shield',
     cursor: { lane: 1, col: 1 },
     kills: 0,
     best: 0,
@@ -151,7 +154,7 @@ export function placeAt(prev, lane, col) {
     return s
   }
   s.mana -= u.cost
-  s.units.push({ id: s.nextId++, key, lane, x: col, hp: u.hp, maxHp: u.hp, atk: u.atk, range: u.range, interval: u.interval, antiAir: !!u.antiAir, cd: 0, flash: -1 })
+  s.units.push({ id: s.nextId++, key, lane, x: col, hp: u.hp, maxHp: u.hp, atk: u.atk, heal: u.heal || 0, range: u.range, interval: u.interval, antiAir: !!u.antiAir, cd: 0, flash: -1 })
   sound(s, 'shop')
   return s
 }
@@ -203,7 +206,7 @@ export function tick(prev) {
     s.queue.shift()
     const t = ENEMIES[sp.type]
     const hp = t.boss ? 60 + s.stage * 10 : t.hp + Math.floor((s.stage - 1) / 2)
-    s.enemies.push({ id: s.nextId++, type: sp.type, name: t.name, lane: sp.lane, x: COLS - 1, hp, maxHp: hp, atk: t.atk, speed: t.speed, air: !!t.air, boss: !!t.boss, mv: 0, cd: 0, flash: -1, dead: false })
+    s.enemies.push({ id: s.nextId++, type: sp.type, name: t.name, lane: sp.lane, x: COLS - 1, hp, maxHp: hp, atk: t.atk, speed: t.speed, air: !!t.air, boss: !!t.boss, kamikaze: !!t.kamikaze, mv: 0, cd: 0, flash: -1, dead: false })
   }
 
   // 2) 우리 유닛 공격 (가장 가까운 적)
@@ -211,6 +214,20 @@ export function tick(prev) {
     if (u.dead) continue
     if (u.cd > 0) {
       u.cd -= 1
+      continue
+    }
+    if (u.heal > 0) {
+      // 치유사: 같은 길에서 사거리 안의 가장 다친 아군을 회복
+      let ally = null
+      for (const a of s.units) {
+        if (a.dead || a === u || a.lane !== u.lane || Math.abs(a.x - u.x) > u.range || a.hp >= a.maxHp) continue
+        if (!ally || a.hp / a.maxHp < ally.hp / ally.maxHp) ally = a
+      }
+      if (ally) {
+        ally.hp = Math.min(ally.maxHp, ally.hp + u.heal)
+        ally.flash = s.tick
+        u.cd = u.interval
+      }
       continue
     }
     let target = null
@@ -232,6 +249,19 @@ export function tick(prev) {
     if (e.cd > 0) e.cd -= 1
     const blocker = e.air ? null : s.units.find((u) => !u.dead && u.lane === e.lane && u.x === e.x - 1)
     if (blocker) {
+      if (e.kamikaze) {
+        // 폭탄 고블린: 막아선 유닛에 폭발하고 사라진다
+        blocker.hp -= e.atk * 2
+        blocker.flash = s.tick
+        e.dead = true
+        pushLog(s, '💣 폭탄 고블린이 터졌다!')
+        if (blocker.hp <= 0) {
+          blocker.dead = true
+          pushLog(s, `${UNITS[blocker.key].name} 쓰러졌다.`)
+        }
+        event = event || 'hurt'
+        continue
+      }
       if (e.cd === 0) {
         blocker.hp -= e.atk
         blocker.flash = s.tick

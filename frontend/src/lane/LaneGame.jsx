@@ -17,7 +17,7 @@ import {
   unlockedUnits,
   ENEMIES,
 } from './laneEngine'
-import { spriteUrl } from '../game/sprites'
+import { laneSpriteUrl } from './laneSprites'
 import { playSound, unlockSound } from '../game/sound'
 import './lane.css'
 
@@ -69,14 +69,14 @@ function Cell({ s, lane, col, onClick }) {
   } else if (unit) {
     body = (
       <>
-        <img src={spriteUrl(UNITS[unit.key].sprite)} width={40} height={40} alt={UNITS[unit.key].name} />
+        <img src={laneSpriteUrl(unit.key)} width={40} height={40} alt={UNITS[unit.key].name} />
         <i className="ld-hp"><b style={{ width: `${Math.max(0, (unit.hp / unit.maxHp) * 100)}%` }} /></i>
       </>
     )
   } else if (enemy) {
     body = (
       <>
-        <img src={spriteUrl(ENEMIES[enemy.type].sprite)} width={enemy.boss ? 52 : 40} height={enemy.boss ? 52 : 40} alt={enemy.name} />
+        <img src={laneSpriteUrl(ENEMIES[enemy.type].sprite)} width={enemy.boss ? 52 : 40} height={enemy.boss ? 52 : 40} alt={enemy.name} />
         <i className="ld-hp enemy"><b style={{ width: `${Math.max(0, (enemy.hp / enemy.maxHp) * 100)}%` }} /></i>
       </>
     )
@@ -127,7 +127,7 @@ export default function LaneGame({ onExit }) {
       else if (k === 'ArrowDown') { e.preventDefault(); setState((s) => moveCursor(s, 1, 0)) }
       else if (k === 'ArrowLeft') { e.preventDefault(); setState((s) => moveCursor(s, 0, -1)) }
       else if (k === 'ArrowRight') { e.preventDefault(); setState((s) => moveCursor(s, 0, 1)) }
-      else if (k >= '1' && k <= '4') setState((s) => selectUnit(s, Number(k) - 1))
+      else if (k >= '1' && k <= String(UNIT_ORDER.length)) setState((s) => selectUnit(s, Number(k) - 1))
       else if (k === 'Enter' || k === ' ') {
         e.preventDefault()
         setState((s) => (s.phase === 'between' ? nextStage(s) : s.phase === 'playing' ? placeAt(s, s.cursor.lane, s.cursor.col) : s))
@@ -188,7 +188,7 @@ export default function LaneGame({ onExit }) {
                   onClick={() => { unlockSound(); setState((s) => selectUnit(s, i)) }}
                 >
                   <span className="ld-key">{i + 1}</span>
-                  <img src={spriteUrl(u.sprite)} width={36} height={36} alt="" />
+                  <img src={laneSpriteUrl(key)} width={36} height={36} alt="" />
                   <b>{u.name}</b>
                   <span className="ld-cost">{locked ? `스테이지 ${u.unlock}` : `마나 ${u.cost}`}</span>
                   <span className="ld-desc">{u.desc}</span>
@@ -209,7 +209,7 @@ export default function LaneGame({ onExit }) {
           <div className="ld-guide">
             <h2>조작</h2>
             <p><kbd>←</kbd><kbd>→</kbd><kbd>↑</kbd><kbd>↓</kbd> 칸 이동</p>
-            <p><kbd>1</kbd>~<kbd>4</kbd> 유닛 고르기</p>
+            <p><kbd>1</kbd>~<kbd>6</kbd> 유닛 고르기</p>
             <p><kbd>Enter</kbd> 유닛 세우기</p>
             <p><kbd>X</kbd> 번개 · <kbd>Esc</kbd> 게임 선택</p>
             <p className="ld-tip">칸을 직접 누르거나 유닛 카드를 눌러도 됩니다. 하늘 길은 궁수·마법사만 세울 수 있어요.</p>
