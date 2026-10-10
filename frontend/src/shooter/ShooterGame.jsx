@@ -27,6 +27,9 @@ export default function ShooterGame({ onExit }) {
   const mouse = useRef({ x: 0, y: 0, down: false, lastMove: 0, active: false })
   const [best, setBest] = useState(loadBest)
   const [over, setOver] = useState(false)
+  // 자동 조준·발사: 한 손(WASD)만으로 싸울 수 있게 기본은 켜짐. F 키로 끈다
+  const autoRef = useRef(true)
+  const [auto, setAuto] = useState(true)
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -42,12 +45,21 @@ export default function ShooterGame({ onExit }) {
       const k = keys.current
       const dx = (k.has('ArrowRight') || k.has('d') ? 1 : 0) - (k.has('ArrowLeft') || k.has('a') ? 1 : 0)
       const dy = (k.has('ArrowDown') || k.has('s') ? 1 : 0) - (k.has('ArrowUp') || k.has('w') ? 1 : 0)
-      const fire = k.has(' ') || mouse.current.down
-      // 마우스를 최근에 움직였으면 마우스 방향으로 조준
+      const auto = autoRef.current
+      const fire = k.has(' ') || mouse.current.down || auto
+      const p0 = worldRef.current.player
+      // 조준: 마우스를 최근에 움직였으면 마우스 방향, 아니면 자동 조준이 가장 가까운 적을 겨눈다
       let aim = null
       if (mouse.current.active && now - mouse.current.lastMove < 2500) {
-        const p = worldRef.current.player
-        aim = Math.atan2(mouse.current.y - p.y, mouse.current.x - p.x)
+        aim = Math.atan2(mouse.current.y - p0.y, mouse.current.x - p0.x)
+      } else if (auto) {
+        let best = null
+        let bd = Infinity
+        for (const e of worldRef.current.enemies) {
+          const d = (e.x - p0.x) ** 2 + (e.y - p0.y) ** 2
+          if (d < bd) { bd = d; best = e }
+        }
+        if (best) aim = Math.atan2(best.y - p0.y, best.x - p0.x)
       }
       const w = update(worldRef.current, dt, { dx, dy, fire, aim })
       worldRef.current = w
@@ -87,6 +99,10 @@ export default function ShooterGame({ onExit }) {
       if (e.key === 'r' || e.key === 'R') {
         if (worldRef.current.over) reset()
         return
+      }
+      if (e.key === 'f' || e.key === 'F') {
+        autoRef.current = !autoRef.current
+        setAuto(autoRef.current)
       }
       if (['1', '2', '3'].includes(e.key)) switchWeapon(worldRef.current, Number(e.key) - 1)
       if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(e.key)) e.preventDefault()
@@ -147,8 +163,9 @@ export default function ShooterGame({ onExit }) {
         <canvas ref={canvasRef} width={W} height={H} className="sh-canvas" />
       </div>
       <p className="sh-help">
-        <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 또는 방향키로 이동 (두 키를 함께 누르면 대각선)
-        · <kbd>Space</kbd> 또는 마우스 클릭으로 발사 · 마우스로 조준
+        <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 로 이동 (한 손으로 충분해요)
+        · <kbd>F</kbd> 자동 조준·발사 <b>{auto ? '켜짐' : '꺼짐'}</b>
+        · <kbd>Space</kbd> 또는 마우스 클릭으로 발사 · 마우스로 직접 조준
         · <kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> 무기 바꾸기 · <kbd>Esc</kbd> 게임 선택
         {over && <> · <b>R</b> 다시 시작</>}
       </p>

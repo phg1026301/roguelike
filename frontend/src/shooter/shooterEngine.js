@@ -6,12 +6,10 @@ export const H = 540
 const PLAYER_SPEED = 230
 
 // 장애물 (사각형). 캐릭터는 벽을 통과할 수 없다
+// 장애물은 최소로: 넓게 트인 전장에 작은 기둥 두 개만 둔다
 const WALLS = [
-  { x: 200, y: 120, w: 170, h: 34 },
-  { x: 600, y: 380, w: 170, h: 34 },
-  { x: 440, y: 220, w: 80, h: 80 },
-  { x: 110, y: 370, w: 34, h: 110 },
-  { x: 800, y: 130, w: 34, h: 120 },
+  { x: 250, y: 300, w: 60, h: 26 },
+  { x: 650, y: 210, w: 60, h: 26 },
 ]
 export const WALL_LIST = WALLS
 
@@ -31,13 +29,12 @@ export const ENEMIES = {
 
 function waveSpec(wave) {
   const list = []
-  const count = 4 + wave * 2
+  const count = 8 + wave * 4
   for (let i = 0; i < count; i++) {
     const r = Math.random()
-    let type = 'slime'
-    if (wave >= 2 && r < 0.35) type = 'goblin'
-    if (wave >= 3 && r > 0.7) type = 'bat'
-    if (wave >= 4 && r > 0.9) type = 'orc'
+    let type = r < 0.6 ? 'slime' : 'goblin'
+    if (wave >= 2 && r > 0.8) type = 'bat'
+    if (wave >= 3 && r > 0.9) type = 'orc'
     list.push(type)
   }
   return list
@@ -248,7 +245,8 @@ export function update(w, dt, input) {
       w.queue = waveSpec(w.wave)
       w.waveTimer = 0.5
       notice(w, `웨이브 ${w.wave}!`)
-      if (w.wave === 3) notice(w, '웨이브 3: 박쥐가 나온다!')
+      if (w.wave === 2) notice(w, '웨이브 2: 박쥐가 나온다!')
+      if (w.wave === 3) notice(w, '웨이브 3: 오크가 나온다!')
     }
   } else if (w.queue.length > 0) {
     w.waveTimer -= dt
@@ -257,7 +255,7 @@ export function update(w, dt, input) {
       const pos = spawnPos()
       const spec = ENEMIES[type]
       w.enemies.push({ id: Math.random(), type, name: spec.name, x: pos.x, y: pos.y, r: spec.r, hp: spec.hp + Math.floor(w.wave / 4), maxHp: spec.hp, speed: spec.speed, dmg: spec.dmg, color: spec.color, coin: spec.coin, erratic: !!spec.erratic, walk: 0, flash: 0, kx: 0, ky: 0, dead: false })
-      w.waveTimer = Math.max(0.25, 0.9 - w.wave * 0.05)
+      w.waveTimer = Math.max(0.2, 0.7 - w.wave * 0.04)
     }
   }
   return w

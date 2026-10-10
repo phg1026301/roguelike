@@ -204,6 +204,19 @@ const TRACKS = {
   },
 }
 
+// 네온 시티: 드럼 없이 느리게 깔리는 SF 패드. 소리를 작게 (볼륨 낮음)
+TRACKS.neon = {
+  bpm: 72,
+  lead: [
+    'A4', null, 'C5', null, 'E5', null, 'G5', null,
+    'E5', null, 'C5', null, 'B4', null, 'A4', null,
+    'F4', null, 'A4', null, 'C5', null, 'E5', null,
+    'D5', null, 'B4', null, 'G4', null, null, null,
+  ],
+  bass: [...quarter(['A2', 'F2', 'C3', 'G2']), ...quarter(['F2', 'D2', 'G2', 'E2'])],
+  leadType: 'sine', leadVol: 0.018, bassVol: 0.05, kick: false, hat: false,
+}
+
 let music = null // { name, step, next, timer }
 
 function playMusicStep(c, t, i, when, dur) {
