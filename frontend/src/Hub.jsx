@@ -35,6 +35,15 @@ const GAMES = [
     sprite: 'summoner',
     color: '#c58bff',
   },
+  {
+    id: 'lane',
+    no: 4,
+    name: '레인 디펜스',
+    genre: '실시간 · 디펜스',
+    desc: '마나로 유닛을 세워 3개의 길을 막아요. 하늘에서 오는 적도 있고 3스테이지마다 보스가 나와요.',
+    sprite: 'golem',
+    color: '#7fe0a0',
+  },
 ]
 
 // 1단계: 제목 화면. 아무 키나 누르면 게임 선택으로 넘어간다
@@ -84,7 +93,7 @@ export function SelectScreen({ onPick, onBack }) {
         <span className="hub-series">{SERIES_TITLE}</span>
       </header>
       <h2 className="select-title">게임을 고르세요</h2>
-      <p className="select-sub">카드를 클릭하거나 키보드 <kbd>1</kbd> <kbd>2</kbd> 로 선택</p>
+      <p className="select-sub">카드를 클릭하거나 키보드 <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> <kbd>4</kbd> 로 선택</p>
       <div className="game-cards">
         {GAMES.map((g) => (
           <button key={g.id} className="game-card" style={{ '--game': g.color }} onClick={() => onPick(g.id)}>

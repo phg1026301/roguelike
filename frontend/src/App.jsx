@@ -10,6 +10,7 @@ import { playSound, unlockSound, toggleMute, isMuted, startMusic, stopMusic, get
 import { TitleScreen, SelectScreen } from './Hub'
 import TowerGame from './tower/TowerGame'
 import CardGame from './cards/CardGame'
+import LaneGame from './lane/LaneGame'
 
 // 조작 명령: 키보드와 터치 버튼이 같은 동작을 하게 한다
 const COMMANDS = {
@@ -912,6 +913,7 @@ function App() {
   if (screen === 'select') return <SelectScreen onPick={pick} onBack={toTitle} />
   if (screen === 'tower') return <TowerGame onExit={toSelect} />
   if (screen === 'cards') return <CardGame onExit={toSelect} />
+  if (screen === 'lane') return <LaneGame onExit={toSelect} />
   return <Roguelike onExit={toSelect} />
 }
 

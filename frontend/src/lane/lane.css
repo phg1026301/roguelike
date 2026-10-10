@@ -1,0 +1,242 @@
+/* 레인 디펜스 화면 */
+.lane-app {
+  min-height: 100vh;
+  padding: 16px;
+  box-sizing: border-box;
+  color: #ddd;
+  background: radial-gradient(circle at 50% 0%, #1b2a22 0%, #0d1310 70%);
+  position: relative;
+}
+.lane-app * { box-sizing: border-box; }
+
+.ld-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+.ld-head h1 {
+  margin: 0;
+  font-family: 'Press Start 2P', monospace;
+  font-size: 20px;
+  color: #7fe0a0;
+  text-shadow: 3px 3px 0 #1d4a33;
+}
+.ld-stats { display: flex; gap: 14px; font-size: 14px; color: #aaa; margin-left: auto; }
+.ld-stats b { color: #f0c060; }
+
+.ld-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 260px;
+  gap: 16px;
+  align-items: start;
+  max-width: 1100px;
+  margin: 0 auto;
+}
+
+/* 보드 */
+.ld-board {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: #0f1a14;
+  border: 2px solid #2b4a3a;
+  border-radius: 12px;
+  padding: 10px;
+  overflow-x: auto;
+}
+.ld-lane {
+  display: grid;
+  grid-template-columns: 64px repeat(var(--cols), minmax(44px, 1fr));
+  gap: 4px;
+  align-items: center;
+}
+.ld-lane.air {
+  border-top: 1px dashed #4f7fd0;
+  padding-top: 6px;
+}
+.ld-lane-name { font-size: 12px; color: #8fb9a0; }
+.ld-lane.air .ld-lane-name { color: #8fb8ff; }
+
+.ld-cell {
+  position: relative;
+  height: 56px;
+  border-radius: 6px;
+  border: 1px solid #22372c;
+  background: linear-gradient(#18281f, #111b16);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  cursor: default;
+  color: inherit;
+  font: inherit;
+}
+.ld-cell.base { background: #2a2014; border-color: #6a4f2a; }
+.ld-cell.open { cursor: pointer; }
+.ld-cell.open:hover { border-color: #7fe0a0; background: #1d3327; }
+.ld-cell.here { outline: 2px solid #f0c060; outline-offset: -2px; }
+.ld-cell.hit { animation: ld-hit 0.25s; }
+.ld-cell.boss { background: #2a1420; border-color: #a0304f; }
+.ld-cell:disabled { opacity: 1; }
+
+@keyframes ld-hit {
+  0% { background: #6a1a1a; }
+  100% { background: inherit; }
+}
+
+.ld-base-icon { font-size: 26px; }
+.ld-base-hp {
+  position: absolute;
+  bottom: 2px;
+  font-size: 11px;
+  color: #f0c060;
+}
+
+.ld-hp {
+  position: absolute;
+  left: 4px;
+  right: 4px;
+  bottom: 3px;
+  height: 4px;
+  background: #0a0f0c;
+  border-radius: 2px;
+  overflow: hidden;
+  display: block;
+}
+.ld-hp b { display: block; height: 100%; background: #3fd17a; }
+.ld-hp.enemy b { background: #e0263f; }
+
+/* 마나와 기타 정보 */
+.ld-mana {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 12px 0 8px;
+  font-size: 14px;
+}
+.ld-mana-label { color: #8fb9ff; }
+.ld-mana-bar {
+  flex: 1;
+  height: 12px;
+  background: #0f1a2a;
+  border: 1px solid #2d4a7a;
+  border-radius: 6px;
+  overflow: hidden;
+}
+.ld-mana-bar b { display: block; height: 100%; background: linear-gradient(90deg, #3a7bd5, #7fb8ff); transition: width 0.3s; }
+.ld-mana-num { color: #cfe3ff; min-width: 70px; text-align: right; }
+.ld-wave { color: #aaa; }
+
+/* 유닛 카드 */
+.ld-units {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+}
+.ld-unit {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 6px;
+  background: #151f1a;
+  border: 2px solid #2b4a3a;
+  border-radius: 10px;
+  color: #ddd;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+}
+.ld-unit:hover:not(:disabled) { border-color: #7fe0a0; }
+.ld-unit.on { border-color: #f0c060; background: #241e10; }
+.ld-unit.locked { opacity: 0.4; cursor: not-allowed; }
+.ld-unit.lightning { border-color: #5b4a8a; }
+.ld-unit.lightning:hover { border-color: #c58bff; }
+.ld-key {
+  position: absolute;
+  top: 4px;
+  left: 6px;
+  font-size: 11px;
+  color: #888;
+}
+.ld-cost { color: #8fb9ff; font-size: 12px; }
+.ld-desc { font-size: 11px; color: #888; text-align: center; line-height: 1.3; }
+.ld-bolt { font-size: 28px; line-height: 1; }
+
+/* 사이드 */
+.ld-side { display: flex; flex-direction: column; gap: 12px; }
+.ld-guide, .ld-log {
+  background: #151f1a;
+  border: 1px solid #2b4a3a;
+  border-radius: 10px;
+  padding: 12px;
+  font-size: 13px;
+}
+.ld-guide h2 { margin: 0 0 6px; font-size: 15px; color: #7fe0a0; }
+.ld-guide p { margin: 6px 0; }
+.ld-guide kbd {
+  display: inline-block;
+  min-width: 22px;
+  padding: 1px 6px;
+  margin: 0 2px;
+  border: 1px solid #4a6b58;
+  border-bottom-width: 3px;
+  border-radius: 4px;
+  background: #0f1a14;
+  text-align: center;
+  font-size: 12px;
+}
+.ld-tip { color: #888; font-size: 12px; }
+.ld-log { min-height: 120px; }
+.ld-log p { margin: 4px 0; color: #bbb; line-height: 1.4; }
+
+/* 오버레이 */
+.ld-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+}
+.ld-panel {
+  background: #151f1a;
+  border: 2px solid #7fe0a0;
+  border-radius: 14px;
+  padding: 24px 28px;
+  text-align: center;
+  max-width: 380px;
+  width: 90%;
+}
+.ld-panel h2 { margin: 0 0 10px; color: #7fe0a0; font-size: 20px; }
+.ld-panel p { margin: 6px 0 14px; color: #bbb; }
+.ld-new { color: #f0c060 !important; }
+.ld-panel button {
+  background: #2a5a40;
+  color: #fff;
+  border: 0;
+  border-radius: 8px;
+  padding: 10px 16px;
+  margin: 4px;
+  font: inherit;
+  cursor: pointer;
+}
+.ld-panel button:hover { background: #3a7a58; }
+.ld-panel button.ghost { background: #1d1628; border: 1px solid #4a3b63; }
+
+/* 좁은 화면: 보드를 위에, 나머지를 아래로 */
+@media (max-width: 860px) {
+  .ld-main { grid-template-columns: 1fr; }
+  .ld-units { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .ld-stats { margin-left: 0; }
+}
+@media (max-width: 520px) {
+  .ld-lane { grid-template-columns: 48px repeat(var(--cols), minmax(34px, 1fr)); }
+  .ld-cell { height: 44px; }
+  .ld-units { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ld-desc { display: none; }
+}
