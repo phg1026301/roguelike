@@ -8,7 +8,8 @@ export default function ActionGame({ onExit }) {
   const wrapRef = useRef(null)
   const canvasRef = useRef(null)
   const worldRef = useRef(createWorld())
-  const input = useRef({ keys: new Set(), attack: false, dodge: false })
+  // 키 상태: keys와 mouseHeld는 누르고 있는 동안 계속 true, 나머지는 한 번 누르면 다음 프레임에 한 번만 쓴다
+  const input = useRef({ keys: new Set(), mouseHeld: false, attack: false, dodge: false, interact: false, potion: false, bag: false, choice: 0 })
   const [full, setFull] = useState(false)
 
   useEffect(() => {
@@ -20,12 +21,27 @@ export default function ActionGame({ onExit }) {
     function frame(now) {
       const dt = Math.min(0.05, (now - last) / 1000)
       last = now
-      const k = input.current.keys
+      const i = input.current
+      const k = i.keys
       const dx = (k.has('ArrowRight') || k.has('d') ? 1 : 0) - (k.has('ArrowLeft') || k.has('a') ? 1 : 0)
       const dy = (k.has('ArrowDown') || k.has('s') ? 1 : 0) - (k.has('ArrowUp') || k.has('w') ? 1 : 0)
-      const cmd = { dx, dy, attack: input.current.attack, dodge: input.current.dodge }
-      input.current.attack = false
-      input.current.dodge = false
+      const attackHeld = k.has('j') || k.has('z') || i.mouseHeld
+      const cmd = {
+        dx, dy,
+        attack: i.attack,
+        attackHeld,
+        dodge: i.dodge,
+        interact: i.interact,
+        potion: i.potion,
+        bag: i.bag,
+        choice: i.choice,
+      }
+      i.attack = false
+      i.dodge = false
+      i.interact = false
+      i.potion = false
+      i.bag = false
+      i.choice = 0
       const w = update(worldRef.current, dt, cmd)
       worldRef.current = w
       draw(ctx, w, now / 1000)
@@ -37,7 +53,7 @@ export default function ActionGame({ onExit }) {
       worldRef.current = createWorld()
     }
 
-    // 키 이름을 소문자로 맞춰서 저장한다 (Shift 같은 조합도 같은 키로 본다)
+    // 키 이름을 소문자로 맞춘다 (Shift 같은 조합도 같은 키로 본다)
     const norm = (key) => (key.length === 1 ? key.toLowerCase() : key)
 
     function onDown(e) {
@@ -51,9 +67,14 @@ export default function ActionGame({ onExit }) {
       unlockSound()
       if (e.repeat) return
       const key = norm(e.key)
-      input.current.keys.add(key)
-      if (key === 'j' || key === 'z') input.current.attack = true
-      if (key === 'k' || key === ' ') input.current.dodge = true
+      const i = input.current
+      i.keys.add(key)
+      if (key === 'j' || key === 'z') i.attack = true
+      if (key === ' ' || key === 'k') i.dodge = true
+      if (key === 'e' || key === 'Enter') i.interact = true
+      if (key === 'q') i.potion = true
+      if (key === 'i') i.bag = true
+      if (/^[1-9]$/.test(key)) i.choice = Number(key)
       if (key === 'r' && worldRef.current.over) restart()
       if (key === 'f') toggleFull()
     }
@@ -62,14 +83,21 @@ export default function ActionGame({ onExit }) {
     }
     function onMouseDown(e) {
       unlockSound()
-      if (e.button === 0) input.current.attack = true
+      if (e.button === 0) {
+        input.current.mouseHeld = true
+        input.current.attack = true
+      }
       if (e.button === 2) input.current.dodge = true
+    }
+    function onMouseUp(e) {
+      if (e.button === 0) input.current.mouseHeld = false
     }
     function onContext(e) {
       e.preventDefault()
     }
     function onBlur() {
       input.current.keys.clear()
+      input.current.mouseHeld = false
     }
     function onFs() {
       setFull(!!document.fullscreenElement)
@@ -77,6 +105,7 @@ export default function ActionGame({ onExit }) {
 
     window.addEventListener('keydown', onDown)
     window.addEventListener('keyup', onUp)
+    window.addEventListener('mouseup', onMouseUp)
     window.addEventListener('blur', onBlur)
     document.addEventListener('fullscreenchange', onFs)
     canvas.addEventListener('mousedown', onMouseDown)
@@ -85,6 +114,7 @@ export default function ActionGame({ onExit }) {
       cancelAnimationFrame(raf)
       window.removeEventListener('keydown', onDown)
       window.removeEventListener('keyup', onUp)
+      window.removeEventListener('mouseup', onMouseUp)
       window.removeEventListener('blur', onBlur)
       document.removeEventListener('fullscreenchange', onFs)
       canvas.removeEventListener('mousedown', onMouseDown)
@@ -113,9 +143,9 @@ export default function ActionGame({ onExit }) {
         <canvas ref={canvasRef} width={VIEW_W} height={VIEW_H} className="ac-canvas" />
       </div>
       <p className="ac-help">
-        <kbd>WASD</kbd> 또는 방향키 이동 · <kbd>J</kbd>/<kbd>Z</kbd> 또는 왼쪽 클릭 공격 (연속으로 누르면 3단 콤보)
-        · <kbd>Space</kbd>/<kbd>K</kbd> 또는 오른쪽 클릭 회피 (잠깐 무적)
-        · <kbd>F</kbd> 전체화면 · <kbd>R</kbd> 다시 시작 · <kbd>Esc</kbd> 게임 선택
+        <kbd>WASD</kbd> 또는 방향키 이동 · <kbd>J</kbd>/<kbd>Z</kbd> 또는 왼쪽 클릭: 누르고 있으면 콤보가 계속 이어짐
+        · <kbd>Space</kbd>/<kbd>K</kbd> 또는 오른쪽 클릭 회피 · <kbd>E</kbd>/<kbd>Enter</kbd> 대화 · <kbd>Q</kbd> 물약
+        · <kbd>I</kbd> 가방·장비 · <kbd>F</kbd> 전체화면 · <kbd>R</kbd> 다시 시작 · <kbd>Esc</kbd> 게임 선택
       </p>
     </div>
   )
