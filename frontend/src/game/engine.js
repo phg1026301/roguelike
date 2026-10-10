@@ -7,11 +7,20 @@ const POTION_HEAL = 8
 const BOSS_EVERY = 5 // 몇 층마다 보스가 나오는지
 const BOSS_SCORE = 500
 // 난이도: 몬스터와 보스의 체력, 공격력, 경험치 배율 (시작 화면에서 고른다)
+// boss: 보스 행동 설정
+//   speed: 플레이어를 쫓아오는 속도 (1 = 매 턴)
+//   reach: 플레이어를 발견하고 공격을 준비하는 거리 (맨해튼 거리)
+//   line: 돌진 줄기 길이 (칸)   cross: 십자 파동의 팔 길이 (칸)
+//   extraMove: 한 턴에 한 번 더 움직일 확률
 export const DIFFICULTIES = {
-  쉬움: { hp: 0.7, atk: 0.7, xp: 0.8, scoreMult: 0.7, desc: '몬스터가 약하다. 처음이라면 여기서 시작하세요' },
-  보통: { hp: 1, atk: 1, xp: 1, scoreMult: 1, desc: '기본 난이도' },
-  어려움: { hp: 1.3, atk: 1.3, xp: 1.2, scoreMult: 1.3, desc: '몬스터가 강하다. 포션과 장비를 잘 챙기세요' },
-  지옥: { hp: 1.7, atk: 1.6, xp: 1.5, scoreMult: 1.6, desc: '살아남기 어렵다. 실력자용' },
+  쉬움: { hp: 0.7, atk: 0.7, xp: 0.8, scoreMult: 0.7, desc: '몬스터가 약하다. 처음이라면 여기서 시작하세요',
+    boss: { speed: 0.5, reach: 4, line: 3, cross: 2, extraMove: 0 } },
+  보통: { hp: 1, atk: 1, xp: 1, scoreMult: 1, desc: '기본 난이도',
+    boss: { speed: 0.6, reach: 5, line: 4, cross: 2, extraMove: 0 } },
+  어려움: { hp: 1.3, atk: 1.3, xp: 1.2, scoreMult: 1.3, desc: '몬스터가 강하다. 보스는 더 빠르고 더 멀리 공격한다',
+    boss: { speed: 0.8, reach: 6, line: 5, cross: 3, extraMove: 0.3 } },
+  지옥: { hp: 1.7, atk: 1.6, xp: 1.5, scoreMult: 1.6, desc: '살아남기 어렵다. 보스가 매우 빠르고 공격 범위가 넓다',
+    boss: { speed: 1, reach: 7, line: 6, cross: 3, extraMove: 0.6 } },
 }
 export const DIFFICULTY_IDS = Object.keys(DIFFICULTIES)
 function diffOf(name) {
@@ -293,7 +302,7 @@ function makeBoss(pos, stats, diff) {
   const hp = scale(stats.hp, diff.hp)
   return {
     id: nextId++, ch: 'B', boss: true, ...pos, name: stats.name,
-    hp, maxHp: hp, atk: scale(stats.atk, diff.atk), speed: 0.6, xp: scale(stats.xp, diff.xp),
+    hp, maxHp: hp, atk: scale(stats.atk, diff.atk), speed: diff.boss.speed, xp: scale(stats.xp, diff.xp),
     cooldown: 2, windup: false, summoned: false,
     phase: 1, // 2 = 체력 절반 이하 (십자 파동 사용)
     telegraph: null, // 예고한 공격 { kind: 'line' | 'cross', cells: [{x, y}] }
@@ -549,19 +558,22 @@ function bossPattern(state, m) {
   const dx = p.x - m.x
   const dy = p.y - m.y
   const open = (x, y) => x >= 0 && y >= 0 && x < W && y < H && state.tiles[y][x] !== '#'
-  // 십자 파동 (2페이즈): 보스 주변 十자 모양 2칸
+  const bd = diffOf(state.difficulty).boss
+  // 십자 파동 (2페이즈): 보스 주변 十자 모양 (팔 길이는 난이도에 따라 다르다)
   if (m.phase === 2) {
-    const cells = [[1, 0], [2, 0], [-1, 0], [-2, 0], [0, 1], [0, 2], [0, -1], [0, -2]]
+    const offsets = []
+    for (let k = 1; k <= bd.cross; k++) offsets.push([k, 0], [-k, 0], [0, k], [0, -k])
+    const cells = offsets
       .map(([x, y]) => ({ x: m.x + x, y: m.y + y }))
       .filter((c) => open(c.x, c.y))
     if (cells.some((c) => c.x === p.x && c.y === p.y)) return { kind: 'cross', cells }
   }
-  // 돌진 줄기: 같은 줄(가로/세로) 4칸 앞까지
-  if ((dx === 0) !== (dy === 0) && Math.abs(dx) + Math.abs(dy) <= 5) {
+  // 돌진 줄기: 같은 줄(가로/세로) 여러 칸 앞까지 (길이는 난이도에 따라 다르다)
+  if ((dx === 0) !== (dy === 0) && Math.abs(dx) + Math.abs(dy) <= bd.reach) {
     const sx = Math.sign(dx)
     const sy = Math.sign(dy)
     const cells = []
-    for (let i = 1; i <= 4 && open(m.x + sx * i, m.y + sy * i); i++) cells.push({ x: m.x + sx * i, y: m.y + sy * i })
+    for (let i = 1; i <= bd.line && open(m.x + sx * i, m.y + sy * i); i++) cells.push({ x: m.x + sx * i, y: m.y + sy * i })
     if (cells.some((c) => c.x === p.x && c.y === p.y)) return { kind: 'line', cells }
   }
   return null
@@ -635,19 +647,29 @@ function monstersAct(state) {
     if (!m.alert) continue
     // 느린 몬스터는 가끔 따라오지 못한다
     if (Math.random() >= (m.speed ?? 1) * (1 - Math.min(0.8, p.agility))) continue
-    const tryMoves = Math.abs(dx) > Math.abs(dy)
-      ? [[Math.sign(dx), 0], [0, Math.sign(dy)]]
-      : [[0, Math.sign(dy)], [Math.sign(dx), 0]]
-    for (const [mx, my] of tryMoves) {
-      if (mx === 0 && my === 0) continue
-      const nx = m.x + mx
-      const ny = m.y + my
-      if (state.tiles[ny][nx] === '#' || monsterAt(state, nx, ny) || npcAt(state, nx, ny) || petAt(state, nx, ny)) continue
-      if (nx === p.x && ny === p.y) continue
-      m.x = nx
-      m.y = ny
-      break
-    }
+    chaseStep(state, m)
+    // 보스는 난이도에 따라 가끔 한 턴에 두 번 움직인다
+    if (m.boss && !state.over && Math.random() < diffOf(state.difficulty).boss.extraMove) chaseStep(state, m)
+  }
+}
+
+// 플레이어 쪽으로 한 칸 움직인다 (막히면 다른 방향을 시도한다)
+function chaseStep(state, m) {
+  const p = state.player
+  const dx = p.x - m.x
+  const dy = p.y - m.y
+  const tryMoves = Math.abs(dx) > Math.abs(dy)
+    ? [[Math.sign(dx), 0], [0, Math.sign(dy)]]
+    : [[0, Math.sign(dy)], [Math.sign(dx), 0]]
+  for (const [mx, my] of tryMoves) {
+    if (mx === 0 && my === 0) continue
+    const nx = m.x + mx
+    const ny = m.y + my
+    if (state.tiles[ny][nx] === '#' || monsterAt(state, nx, ny) || npcAt(state, nx, ny) || petAt(state, nx, ny)) continue
+    if (nx === p.x && ny === p.y) continue
+    m.x = nx
+    m.y = ny
+    break
   }
 }
 

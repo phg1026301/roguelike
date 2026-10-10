@@ -1,13 +1,27 @@
 // 효과음: 음원 파일 없이 Web Audio로 바로 만드는 8비트풍 소리
 const MUTE_KEY = 'roguelike.muted'
+const VOL_KEY = 'roguelike.volume' // { music, sfx } 0~1
 let ctx = null
 let master = null
+let sfxBus = null // 효과음 음량
+let musicBus = null // 배경음악 음량
 let muted = false
 try {
   muted = localStorage.getItem(MUTE_KEY) === '1'
 } catch {
   muted = false
 }
+const DEFAULT_VOL = { music: 0.7, sfx: 0.8 }
+let volume = { ...DEFAULT_VOL }
+try {
+  const saved = JSON.parse(localStorage.getItem(VOL_KEY) || 'null')
+  if (saved && typeof saved.music === 'number') volume.music = saved.music
+  if (saved && typeof saved.sfx === 'number') volume.sfx = saved.sfx
+} catch {
+  volume = { ...DEFAULT_VOL }
+}
+// 배경음악은 원래 작게 만들어져 있어서 2배로 키워 쓴다
+const musicGain = () => volume.music * 2
 
 // 브라우저는 사용자 입력 뒤에야 소리를 허용하므로, 첫 입력 때 깨운다
 function audio() {
@@ -19,6 +33,12 @@ function audio() {
       master = ctx.createGain()
       master.gain.value = 0.5
       master.connect(ctx.destination)
+      sfxBus = ctx.createGain()
+      sfxBus.gain.value = volume.sfx
+      sfxBus.connect(master)
+      musicBus = ctx.createGain()
+      musicBus.gain.value = musicGain()
+      musicBus.connect(master)
     }
     if (ctx.state === 'suspended') ctx.resume()
     return ctx
@@ -46,7 +66,7 @@ export function toggleMute() {
 }
 
 // 주파수가 from에서 to로 미끄러지는 음
-function tone(c, { type = 'square', from, to, t0 = 0, dur = 0.1, vol = 0.2 }) {
+function tone(c, { type = 'square', from, to, t0 = 0, dur = 0.1, vol = 0.2, out = null }) {
   const osc = c.createOscillator()
   const g = c.createGain()
   const start = c.currentTime + t0
@@ -56,13 +76,13 @@ function tone(c, { type = 'square', from, to, t0 = 0, dur = 0.1, vol = 0.2 }) {
   g.gain.setValueAtTime(vol, start)
   g.gain.exponentialRampToValueAtTime(0.0001, start + dur)
   osc.connect(g)
-  g.connect(master)
+  g.connect(out || sfxBus || master)
   osc.start(start)
   osc.stop(start + dur + 0.02)
 }
 
 // 짧은 잡음 (타격 같은 거친 소리)
-function noise(c, { t0 = 0, dur = 0.1, vol = 0.2, filter = 'lowpass', freq = 1200 }) {
+function noise(c, { t0 = 0, dur = 0.1, vol = 0.2, filter = 'lowpass', freq = 1200, out = null }) {
   const len = Math.max(1, Math.floor(c.sampleRate * dur))
   const buf = c.createBuffer(1, len, c.sampleRate)
   const data = buf.getChannelData(0)
@@ -76,7 +96,7 @@ function noise(c, { t0 = 0, dur = 0.1, vol = 0.2, filter = 'lowpass', freq = 120
   g.gain.value = vol
   src.connect(f)
   f.connect(g)
-  g.connect(master)
+  g.connect(out || sfxBus || master)
   src.start(c.currentTime + t0)
 }
 
@@ -187,12 +207,13 @@ const TRACKS = {
 let music = null // { name, step, next, timer }
 
 function playMusicStep(c, t, i, when, dur) {
+  const out = musicBus
   const lead = t.lead[i]
-  if (lead) tone(c, { type: t.leadType, from: noteFreq(lead), t0: when, dur: dur * 0.9, vol: t.leadVol })
+  if (lead) tone(c, { type: t.leadType, from: noteFreq(lead), t0: when, dur: dur * 0.9, vol: t.leadVol, out })
   const bass = t.bass[i]
-  if (bass) tone(c, { type: 'triangle', from: noteFreq(bass), t0: when, dur: dur * 0.95, vol: t.bassVol })
-  if (t.kick && i % 8 === 0) tone(c, { type: 'sine', from: 120, to: 40, t0: when, dur: 0.15, vol: 0.2 })
-  if (t.hat && i % 2 === 1) noise(c, { t0: when, dur: 0.03, vol: 0.05, filter: 'highpass', freq: 6000 })
+  if (bass) tone(c, { type: 'triangle', from: noteFreq(bass), t0: when, dur: dur * 0.95, vol: t.bassVol, out })
+  if (t.kick && i % 8 === 0) tone(c, { type: 'sine', from: 120, to: 40, t0: when, dur: 0.15, vol: 0.2, out })
+  if (t.hat && i % 2 === 1) noise(c, { t0: when, dur: 0.03, vol: 0.05, filter: 'highpass', freq: 6000, out })
 }
 
 // 앞으로 0.3초 분량을 미리 예약한다 (타이머가 조금 늦어도 끊기지 않게)
@@ -224,4 +245,21 @@ export function startMusic(name) {
 export function stopMusic() {
   if (music) clearInterval(music.timer)
   music = null
+}
+
+// 음량 조절: kind는 'music' 또는 'sfx', value는 0~1
+export function getVolume() {
+  return { ...volume }
+}
+
+export function setVolume(kind, value) {
+  if (kind !== 'music' && kind !== 'sfx') return
+  volume = { ...volume, [kind]: Math.max(0, Math.min(1, value)) }
+  try {
+    localStorage.setItem(VOL_KEY, JSON.stringify(volume))
+  } catch {
+    // 저장이 막혀 있어도 이번 접속에서는 동작한다
+  }
+  if (sfxBus) sfxBus.gain.value = volume.sfx
+  if (musicBus) musicBus.gain.value = musicGain()
 }

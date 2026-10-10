@@ -6,7 +6,7 @@ import { RARITY, SLOTS, describeItem, coinTotal, formatPrice } from './game/item
 import { itemIconUrl } from './game/itemSprites'
 import { render, TILE, VIEW_W, VIEW_H, RENDER_SCALE } from './game/renderer'
 import { api, loadAuth, saveAuth, clearAuth, savePendingRun, takePendingRun, runFromGame } from './api'
-import { playSound, unlockSound, toggleMute, isMuted, startMusic, stopMusic } from './game/sound'
+import { playSound, unlockSound, toggleMute, isMuted, startMusic, stopMusic, getVolume, setVolume } from './game/sound'
 import { TitleScreen, SelectScreen } from './Hub'
 import TowerGame from './tower/TowerGame'
 import CardGame from './cards/CardGame'
@@ -296,6 +296,12 @@ function Roguelike({ onExit }) {
   const [loggingIn, setLoggingIn] = useState(false)
   const canvasRef = useRef(null)
   const [muted, setMuted] = useState(isMuted)
+  const [showVol, setShowVol] = useState(false)
+  const [vol, setVol] = useState(getVolume)
+  const changeVol = (kind, percent) => {
+    setVolume(kind, Number(percent) / 100)
+    setVol(getVolume())
+  }
   const prevGameRef = useRef(game)
   const animRef = useRef(null)
   const shakeRef = useRef(null)
@@ -475,6 +481,23 @@ function Roguelike({ onExit }) {
           <h1>ROGUELIKE</h1>
         </div>
         <div className="header-right">
+          <div className="vol-wrap">
+            <button className="mute-btn" onClick={() => setShowVol((v) => !v)} title="음량 조절">🎚</button>
+            {showVol && (
+              <div className="vol-panel">
+                <label>
+                  <span>배경음악</span>
+                  <input type="range" min="0" max="100" value={Math.round(vol.music * 100)} onChange={(e) => changeVol('music', e.target.value)} />
+                  <b>{Math.round(vol.music * 100)}</b>
+                </label>
+                <label>
+                  <span>효과음</span>
+                  <input type="range" min="0" max="100" value={Math.round(vol.sfx * 100)} onChange={(e) => changeVol('sfx', e.target.value)} />
+                  <b>{Math.round(vol.sfx * 100)}</b>
+                </label>
+              </div>
+            )}
+          </div>
           <button className="mute-btn" onClick={() => setMuted(toggleMute())} title="효과음 켜기/끄기 (M)">{muted ? '🔇' : '🔊'}</button>
           <span className={`server ${server === '연결됨' ? 'ok' : ''}`}>● 서버 {server}</span>
           {server === '확인 중' && (
