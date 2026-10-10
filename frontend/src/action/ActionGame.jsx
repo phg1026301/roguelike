@@ -15,6 +15,10 @@ export default function ActionGame({ onExit }) {
   useEffect(() => {
     const canvas = canvasRef.current
     const ctx = canvas.getContext('2d')
+    // 화면 배율(고해상도 모니터)에 맞춰 캔버스를 키워 그린다. 그러면 글자와 그림이 흐려지지 않는다
+    const DPR = Math.min(2, window.devicePixelRatio || 1)
+    canvas.width = VIEW_W * DPR
+    canvas.height = VIEW_H * DPR
     let raf = 0
     let last = performance.now()
 
@@ -44,6 +48,7 @@ export default function ActionGame({ onExit }) {
       i.choice = 0
       const w = update(worldRef.current, dt, cmd)
       worldRef.current = w
+      ctx.setTransform(DPR, 0, 0, DPR, 0, 0)
       draw(ctx, w, now / 1000)
       raf = requestAnimationFrame(frame)
     }

@@ -83,13 +83,16 @@ function drawSheet(ctx, name, row, x, y, size, t, facingLeft) {
 
 // ---------- 배경 캐시 ----------
 const bgCache = {}
+// 배경 그림도 화면 배율에 맞춰 미리 크게 그린다 (최대 2배)
+const BG_S = Math.min(2, (typeof window !== 'undefined' && window.devicePixelRatio) || 1)
 
 function buildFieldBg() {
   const { w, h } = ZONES.field
   const c = document.createElement('canvas')
-  c.width = w
-  c.height = h
+  c.width = w * BG_S
+  c.height = h * BG_S
   const ctx = c.getContext('2d')
+  ctx.scale(BG_S, BG_S)
   const rnd = seeded(7)
   // 기본 풀밭: 위에서 아래로 밝기가 달라진다
   const base = ctx.createLinearGradient(0, 0, 0, h)
@@ -179,9 +182,10 @@ function buildFieldBg() {
 function buildTownBg() {
   const { w, h } = ZONES.town
   const c = document.createElement('canvas')
-  c.width = w
-  c.height = h
+  c.width = w * BG_S
+  c.height = h * BG_S
   const ctx = c.getContext('2d')
+  ctx.scale(BG_S, BG_S)
   const rnd = seeded(11)
   // 풀밭 테두리
   const grass = ctx.createLinearGradient(0, 0, 0, h)
@@ -232,9 +236,10 @@ function buildTownBg() {
 function buildDungeonBg() {
   const { w, h } = ZONES.dungeon
   const c = document.createElement('canvas')
-  c.width = w
-  c.height = h
+  c.width = w * BG_S
+  c.height = h * BG_S
   const ctx = c.getContext('2d')
+  ctx.scale(BG_S, BG_S)
   const rnd = seeded(23)
   ctx.fillStyle = '#2a2a33'
   ctx.fillRect(0, 0, w, h)
