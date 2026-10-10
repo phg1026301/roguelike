@@ -1,0 +1,87 @@
+/* 검의 길: 액션 RPG 프로토타입 */
+.action-app {
+  min-height: 100vh;
+  padding: 16px;
+  box-sizing: border-box;
+  color: #e8f6ff;
+  background: #0d1a12;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.action-app * { box-sizing: border-box; }
+.ac-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  max-width: 960px;
+  width: 100%;
+  margin: 0 auto;
+}
+.ac-head h1 {
+  margin: 0;
+  font-size: 18px;
+  color: #b6ff9e;
+  text-shadow: 0 0 10px rgba(182, 255, 158, 0.5);
+}
+.ac-ghost {
+  margin-left: auto;
+  background: transparent;
+  color: #b6ff9e;
+  border: 1px solid #b6ff9e;
+  border-radius: 6px;
+  padding: 4px 10px;
+  font: inherit;
+  cursor: pointer;
+}
+
+/* 전체화면이면 화면 가득, 비율은 유지 */
+.ac-wrap {
+  width: 100%;
+  max-width: 960px;
+  margin: 0 auto;
+  background: #000;
+  border-radius: 12px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.ac-wrap:fullscreen {
+  max-width: none;
+  border-radius: 0;
+}
+.ac-canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 960 / 540;
+  image-rendering: auto;
+}
+.ac-wrap:fullscreen .ac-canvas {
+  width: min(100vw, calc(100vh * 960 / 540));
+  height: auto;
+}
+
+.ac-help {
+  max-width: 960px;
+  width: 100%;
+  margin: 0 auto;
+  font-size: 13px;
+  line-height: 1.8;
+  color: #9fc7b2;
+}
+.ac-help kbd {
+  display: inline-block;
+  min-width: 22px;
+  padding: 0 6px;
+  border: 1px solid #4a8a66;
+  border-radius: 4px;
+  font-size: 12px;
+  text-align: center;
+  margin: 0 2px;
+}
+@media (max-width: 720px) {
+  .ac-head h1 { font-size: 15px; }
+}

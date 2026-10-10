@@ -62,6 +62,15 @@ const GAMES = [
     sprite: 'merchant',
     color: '#5ee6ff',
   },
+  {
+    id: 'action',
+    no: 7,
+    name: '검의 길',
+    genre: '실시간 · 액션 RPG (프로토타입)',
+    desc: '콤보 공격과 회피로 적을 베어요. 엘소드처럼 손맛 있는 전투를 만들어 가는 중이에요.',
+    sprite: 'warrior',
+    color: '#b6ff9e',
+  },
 ]
 
 // 1단계: 제목 화면. 아무 키나 누르면 게임 선택으로 넘어간다
@@ -111,7 +120,7 @@ export function SelectScreen({ onPick, onBack }) {
         <span className="hub-series">{SERIES_TITLE}</span>
       </header>
       <h2 className="select-title">게임을 고르세요</h2>
-      <p className="select-sub">카드를 클릭하거나 키보드 <kbd>1</kbd>~<kbd>6</kbd> 로 선택</p>
+      <p className="select-sub">카드를 클릭하거나 키보드 <kbd>1</kbd>~<kbd>7</kbd> 로 선택</p>
       <div className="game-cards">
         {GAMES.map((g) => (
           <button key={g.id} className="game-card" style={{ '--game': g.color }} onClick={() => onPick(g.id)}>
