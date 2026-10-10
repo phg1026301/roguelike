@@ -26,6 +26,15 @@ const GAMES = [
     sprite: 'ogre',
     color: '#7fd3ff',
   },
+  {
+    id: 'cards',
+    no: 3,
+    name: '카드 전투',
+    genre: '카드 · 턴제 대결',
+    desc: '카드를 내서 하수인을 세우고 상대 영웅을 먼저 쓰러뜨려요. 컴퓨터와 대결합니다.',
+    sprite: 'summoner',
+    color: '#c58bff',
+  },
 ]
 
 // 1단계: 제목 화면. 아무 키나 누르면 게임 선택으로 넘어간다

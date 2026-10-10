@@ -44,7 +44,11 @@ function Cell({ room, state, floor, col, onClick }) {
     <>
       {here && <img className="tw-hero" src={spriteUrl('warrior')} width={40} height={40} alt="주인공" />}
       {!here && <img className="tw-sprite" src={spriteUrl(room.sprite)} width={40} height={40} alt="" />}
-      <span className={`tw-num ${room.kind}`}>{room.kind === 'boost' ? `+${room.power}` : room.power}</span>
+      {here ? (
+        <span className="tw-num total">⚔{state.power}</span>
+      ) : (
+        <span className={`tw-num ${room.kind}`}>{room.kind === 'boost' ? `+${room.power}` : room.power}</span>
+      )}
     </>
   )
   if (open) {

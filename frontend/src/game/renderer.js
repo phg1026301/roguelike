@@ -531,7 +531,14 @@ export function render(ctx, game, view = {}) {
     const by = VIEW_H * TILE - 16
     px(ctx, bx - 2, by - 2, bw + 4, 10, 'rgba(10,4,14,0.85)')
     px(ctx, bx, by, bw, 6, '#3a0d14')
-    px(ctx, bx, by, Math.max(1, Math.round((bw * boss.hp) / boss.maxHp)), 6, boss.windup ? '#ff9a3b' : boss.phase === 2 ? '#ff5a2a' : '#e0263f')
+    // HP바는 5칸으로 나뉘고, 남은 칸 수에 따라 색이 바뀐다 (칸이 하나 줄 때마다 색 변화)
+    const BOSS_BAR_COLORS = ['#e0263f', '#ff5a2a', '#ff8a3b', '#f0c060', '#c6e04a', '#3fd17a'] // 0칸 ~ 5칸
+    const segs = 5
+    const left = Math.max(0, boss.hp) / boss.maxHp
+    const filledSegs = Math.max(0, Math.min(segs, Math.ceil(left * segs - 1e-9)))
+    const barColor = boss.windup ? '#ff9a3b' : BOSS_BAR_COLORS[filledSegs]
+    px(ctx, bx, by, Math.max(1, Math.round(bw * left)), 6, barColor)
+    for (let i = 1; i < segs; i++) px(ctx, bx + (bw * i) / segs, by, 1, 6, 'rgba(10,4,14,0.9)') // 칸 구분선
     px(ctx, bx + bw / 2, by - 1, 1, 8, 'rgba(255,255,255,0.85)') // 2페이즈 기준선 (체력 절반)
     drawText(ctx, `👑 ${boss.name}  ${boss.hp}/${boss.maxHp}${boss.phase === 2 ? ' · 2페이즈' : ''}`, VIEW_W * TILE / 2, by - 5, '#ffd6dc', 9)
   }

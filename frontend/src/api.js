@@ -45,7 +45,11 @@ async function request(path, { method = 'GET', body, token } = {}) {
 
 export const api = {
   health: () => request('/api/health'),
-  ranking: (difficulty) => request(difficulty && difficulty !== '전체' ? `/api/ranking?difficulty=${encodeURIComponent(difficulty)}` : '/api/ranking'),
+  ranking: (difficulty, limit = 10) => {
+    const q = new URLSearchParams({ limit: String(limit) })
+    if (difficulty && difficulty !== '전체') q.set('difficulty', difficulty)
+    return request(`/api/ranking?${q}`)
+  },
   loginUrl: () => request(`/api/auth/kakao/login-url?redirectUri=${encodeURIComponent(REDIRECT_URI)}`),
   kakaoLogin: (code) => request('/api/auth/kakao', { method: 'POST', body: { code, redirectUri: REDIRECT_URI } }),
   saveRun: (token, run) => request('/api/runs', { method: 'POST', body: run, token }),

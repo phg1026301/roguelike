@@ -71,12 +71,15 @@ public class GameRunController {
         return new SaveRunResponse(run.getId(), run.getScore(), rank);
     }
 
-    // 랭킹 TOP 10 (누구나 조회, difficulty를 주면 그 난이도만)
+    // 랭킹 (누구나 조회, difficulty를 주면 그 난이도만, limit은 1~100, 기본 10)
     @GetMapping("/ranking")
-    public List<RankingEntry> ranking(@RequestParam(required = false) String difficulty) {
+    public List<RankingEntry> ranking(@RequestParam(required = false) String difficulty,
+                                      @RequestParam(defaultValue = "10") int limit) {
+        org.springframework.data.domain.Pageable page =
+                org.springframework.data.domain.PageRequest.of(0, Math.max(1, Math.min(limit, 100)));
         List<GameRun> top = difficulty != null && SCORE_MULT.containsKey(difficulty)
-                ? runs.findTop10ByDifficultyOrderByScoreDescCreatedAtAsc(difficulty)
-                : runs.findTop10ByOrderByScoreDescCreatedAtAsc();
+                ? runs.findByDifficultyOrderByScoreDescCreatedAtAsc(difficulty, page)
+                : runs.findByOrderByScoreDescCreatedAtAsc(page);
         return java.util.stream.IntStream.range(0, top.size())
                 .mapToObj(i -> {
                     GameRun r = top.get(i);

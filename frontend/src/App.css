@@ -345,9 +345,28 @@ button.kakao:disabled { opacity: 0.6; cursor: wait; }
   padding: 0;
 }
 
+.ranking ol.full {
+  max-height: 420px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.ranking .rank-more {
+  width: 100%;
+  margin: 6px 0 8px;
+  padding: 6px 0;
+  background: transparent;
+  color: #c9b8e8;
+  border: 1px dashed #4a3b63;
+  border-radius: 6px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.ranking .rank-more:hover { border-color: #f0c060; color: #f0c060; }
+
 .ranking li {
   display: grid;
-  grid-template-columns: 24px 1fr auto 30px;
+  grid-template-columns: 24px 1fr auto auto;
   gap: 8px;
   align-items: center;
   padding: 4px 2px;
@@ -368,7 +387,7 @@ button.kakao:disabled { opacity: 0.6; cursor: wait; }
 .ranking .r3 { color: #d08a50; }
 .ranking .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ranking .pts { font-family: 'Press Start 2P', monospace; font-size: 10px; color: #eee; }
-.ranking .meta { font-size: 11px; color: #6f6880; text-align: right; }
+.ranking .meta { font-size: 11px; color: #6f6880; text-align: right; white-space: nowrap; }
 .ranking .empty { font-size: 12px; color: #6f6880; }
 
 /* 레벨 / 경험치 */

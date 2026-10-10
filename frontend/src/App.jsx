@@ -9,6 +9,7 @@ import { api, loadAuth, saveAuth, clearAuth, savePendingRun, takePendingRun, run
 import { playSound, unlockSound, toggleMute, isMuted } from './game/sound'
 import { TitleScreen, SelectScreen } from './Hub'
 import TowerGame from './tower/TowerGame'
+import CardGame from './cards/CardGame'
 
 // 조작 명령: 키보드와 터치 버튼이 같은 동작을 하게 한다
 const COMMANDS = {
@@ -282,6 +283,8 @@ function Roguelike({ onExit }) {
   const [ranking, setRanking] = useState([])
   const [rankTab, setRankTab] = useState('전체')
   const rankTabRef = useRef('전체')
+  const [rankFull, setRankFull] = useState(false) // false: TOP 10, true: 전체(최대 100위)
+  const rankFullRef = useRef(false)
   const [saveResult, setSaveResult] = useState(null) // { game, rank } 또는 { game, error }
   const [notice, setNotice] = useState('')
   const [loggingIn, setLoggingIn] = useState(false)
@@ -294,11 +297,16 @@ function Roguelike({ onExit }) {
 
   // 랭킹 탭(전체/쉬움/보통/어려움/지옥): 현재 탭 기준으로 다시 불러온다
   const refreshRanking = useCallback(() => {
-    api.ranking(rankTabRef.current).then(setRanking).catch(() => {})
+    api.ranking(rankTabRef.current, rankFullRef.current ? 100 : 10).then(setRanking).catch(() => {})
   }, [])
   const pickRankTab = (tab) => {
     rankTabRef.current = tab
     setRankTab(tab)
+    refreshRanking()
+  }
+  const toggleRankFull = () => {
+    rankFullRef.current = !rankFullRef.current
+    setRankFull(rankFullRef.current)
     refreshRanking()
   }
 
@@ -764,16 +772,17 @@ function Roguelike({ onExit }) {
           </div>
 
           <div className="panel ranking">
-            <div className="panel-title">🏆 랭킹 TOP 10</div>
+            <div className="panel-title">🏆 랭킹 {rankFull ? '전체' : 'TOP 10'}</div>
             <div className="rank-tabs">
               {RANK_TABS.map((tab) => (
                 <button key={tab} className={`rank-tab ${rankTab === tab ? 'on' : ''}`} onClick={() => pickRankTab(tab)}>{tab}</button>
               ))}
             </div>
+            <button className="rank-more" onClick={toggleRankFull}>{rankFull ? 'TOP 10만 보기' : '전체 랭킹 보기 (100위까지)'}</button>
             {ranking.length === 0 ? (
               <div className="empty">아직 기록이 없어요. 첫 번째 주인공이 되어보세요!</div>
             ) : (
-              <ol>
+              <ol className={rankFull ? 'full' : ''}>
                 {ranking.map((r) => (
                   <li key={r.rank} className={auth && r.nickname === auth.nickname ? 'me' : ''}>
                     <span className={`rank r${r.rank}`}>{r.rank}</span>
@@ -782,7 +791,7 @@ function Roguelike({ onExit }) {
                       {r.nickname}
                     </span>
                     <span className="pts">{r.score}</span>
-                    <span className="meta">지하 {r.depth}층{rankTab === '전체' && r.difficulty ? ` · ${r.difficulty}` : ''}</span>
+                    <span className="meta">지하 {r.depth}층{r.difficulty ? ` · ${r.difficulty}` : ''}</span>
                   </li>
                 ))}
               </ol>
@@ -826,6 +835,7 @@ function App() {
   if (screen === 'title') return <TitleScreen onStart={toSelect} />
   if (screen === 'select') return <SelectScreen onPick={pick} onBack={toTitle} />
   if (screen === 'tower') return <TowerGame onExit={toSelect} />
+  if (screen === 'cards') return <CardGame onExit={toSelect} />
   return <Roguelike onExit={toSelect} />
 }
 

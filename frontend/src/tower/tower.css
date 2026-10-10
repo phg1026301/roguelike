@@ -100,6 +100,7 @@ button.tw-cell.can:focus-visible { outline: 2px solid #f0c060; outline-offset: 2
   text-shadow: 2px 2px 0 #000;
 }
 .tw-num.boost { color: #7fe39a; }
+.tw-num.total { color: #ffd166; font-size: 14px; min-width: 52px; }
 .tw-cell.boss .tw-num { color: #ff5a5a; }
 
 .tw-key {

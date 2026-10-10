@@ -56,7 +56,7 @@ function bossStageStats(depth) {
   const tier = Math.floor(depth / 10) // 10층 → 1
   return {
     name: BOSS_STAGE_NAMES[Math.min(tier - 1, BOSS_STAGE_NAMES.length - 1)],
-    hp: 50 + depth * 5,
+    hp: 150 + depth * 12, // 10층 보스: 10층 270, 20층 390, 30층 510
     atk: 5 + Math.floor(depth / 4),
     xp: 60 + depth * 3,
   }
