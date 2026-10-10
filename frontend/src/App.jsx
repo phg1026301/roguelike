@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import './App.css'
-import { newGame, move, wait, drinkPotion, score, chooseCard, CARDS, xpToNext, chestChoose, shopBuy, shopClose, fire, summon, CLASSES, CLASS_IDS, HIDDEN_CLASS_IDS, setDifficulty, DIFFICULTIES, DIFFICULTY_IDS } from './game/engine'
+import { newGame, move, run, travelToStairs, wait, drinkPotion, score, chooseCard, CARDS, xpToNext, chestChoose, shopBuy, shopClose, fire, summon, CLASSES, CLASS_IDS, HIDDEN_CLASS_IDS, setDifficulty, DIFFICULTIES, DIFFICULTY_IDS } from './game/engine'
 import { spriteUrl } from './game/sprites'
 import { RARITY, SLOTS, describeItem, coinTotal, formatPrice } from './game/items'
 import { itemIconUrl } from './game/itemSprites'
@@ -29,6 +29,10 @@ const KEY_COMMAND = {
   ' ': 'wait', '.': 'wait', q: 'potion', f: 'fire', e: 'summon', Escape: 'escape', r: 'restart',
 }
 const TURN_CMDS = new Set(['up', 'down', 'left', 'right', 'wait'])
+// Shift + 방향키: 달리기 (적이 보일 때까지 한 번에 간다)
+const RUN_DIRS = {
+  ArrowUp: [0, -1], w: [0, -1], ArrowDown: [0, 1], s: [0, 1], ArrowLeft: [-1, 0], a: [-1, 0], ArrowRight: [1, 0], d: [1, 0],
+}
 
 // 연출 값
 const MOVE_MS = 120 // 칸 사이 이동 시간
@@ -408,6 +412,17 @@ function Roguelike({ onExit }) {
       }
       if (/^[1-6]$/.test(key)) {
         setGame((g) => pressNumber(g, Number(key) - 1, availableClasses()))
+        return
+      }
+      // Shift + 방향키: 달리기 · T: 발견한 계단까지 자동 이동
+      if (e.shiftKey && RUN_DIRS[key]) {
+        e.preventDefault()
+        const [dx, dy] = RUN_DIRS[key]
+        setGame((g) => run(g, dx, dy))
+        return
+      }
+      if (key === 't') {
+        setGame((g) => travelToStairs(g))
         return
       }
       const cmd = KEY_COMMAND[key]
@@ -837,6 +852,7 @@ function Roguelike({ onExit }) {
 
           <div className="help">
             <div><kbd>←↑↓→</kbd> <kbd>WASD</kbd> 이동 · {p.range ? '근접 공격(약함)' : '공격'}</div>
+            <div><kbd>Shift</kbd>+방향 달리기 (적이 보이면 멈춤) · <kbd>T</kbd> 발견한 계단까지 자동 이동</div>
             {p.range > 0 && (
               <div className="fire-help"><kbd>F</kbd> 원거리 공격 · 사거리 <b>{p.range}칸</b> (노란 표시가 붙은 적을 자동 조준)</div>
             )}

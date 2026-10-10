@@ -391,6 +391,7 @@ export function aimTarget(state) {
 
 function log(state, msg) {
   state.messages = [...state.messages, msg].slice(-6)
+  state.logCount = (state.logCount || 0) + 1 // 자동 이동이 사건을 알아채는 데 쓴다
 }
 
 // 플레이어에서 (tx,ty)까지 직선 위에 벽이 없으면 보인다
@@ -788,10 +789,7 @@ export function move(prev, dx, dy) {
   state.fx = []
   const p = state.player
 
-  if (petAt(state, nx, ny)) {
-    log(state, '돌 골렘이 길을 막고 있다.')
-    return state
-  }
+  // 돌 골렘 칸은 막히지 않는다: 골렘은 제자리에 두고, 플레이어가 그 칸에 같이 서 있거나 지나갈 수 있다
   const target = monsterAt(state, nx, ny)
   if (target) {
     attack(state, target)
@@ -836,6 +834,103 @@ export function move(prev, dx, dy) {
   }
 
   return endTurn(state, adjacentBefore)
+}
+
+// ---- 여러 칸 자동 이동 (손가락을 덜 쓰게) ----
+// 한 칸씩 move()를 반복한다. 적이 보이거나, 아이템·상자·상점·계단 등 무슨 일이 생기면 멈춘다
+function autoWalk(prev, nextStep, maxSteps = 60) {
+  let state = prev
+  const startDepth = prev.depth
+  for (let i = 0; i < maxSteps; i++) {
+    const dir = nextStep(state)
+    if (!dir) break
+    const before = state.logCount || 0
+    const next = move(state, dir[0], dir[1])
+    if (next === state) break // 벽이나 막힌 칸: 멈춘다
+    state = next
+    if (state.over || state.chest || state.shopOpen || state.depth !== startDepth) break
+    if ((state.logCount || 0) !== before) break // 전투·줍기 같은 사건
+    if (state.monsters.some((m) => !m.dead && state.visible[m.y][m.x])) break
+  }
+  return state
+}
+
+// 달리기: 같은 방향으로 적이 보일 때까지 간다 (Shift + 방향키)
+export function run(prev, dx, dy) {
+  if (blocked(prev)) return prev
+  if (prev.monsters.some((m) => !m.dead && prev.visible[m.y][m.x])) {
+    const s = structuredClone(prev)
+    s.fx = []
+    log(s, '👀 적이 보여서 달릴 수 없다.')
+    return s
+  }
+  return autoWalk(prev, () => [dx, dy])
+}
+
+// 발견한 계단까지 가는 가장 짧은 길 (지나온 칸만 쓴다)
+function stairsPath(state) {
+  const H = state.tiles.length
+  const W = state.tiles[0].length
+  const p = state.player
+  let goal = null
+  for (let y = 0; y < H && !goal; y++) {
+    for (let x = 0; x < W; x++) {
+      if (state.tiles[y][x] === '>' && state.explored[y][x]) {
+        goal = { x, y }
+        break
+      }
+    }
+  }
+  if (!goal) return null
+  const parent = Array.from({ length: H }, () => Array(W).fill(null))
+  const seen = Array.from({ length: H }, () => Array(W).fill(false))
+  seen[p.y][p.x] = true
+  const queue = [[p.x, p.y]]
+  const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]]
+  for (let qi = 0; qi < queue.length; qi++) {
+    const [x, y] = queue[qi]
+    if (x === goal.x && y === goal.y) break
+    for (const [dx, dy] of dirs) {
+      const nx = x + dx
+      const ny = y + dy
+      if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue
+      if (seen[ny][nx] || !state.explored[ny][nx] || state.tiles[ny][nx] === '#') continue
+      seen[ny][nx] = true
+      parent[ny][nx] = [x, y]
+      queue.push([nx, ny])
+    }
+  }
+  if (!seen[goal.y][goal.x]) return null
+  const steps = []
+  let cx = goal.x
+  let cy = goal.y
+  while (cx !== p.x || cy !== p.y) {
+    const [px, py] = parent[cy][cx]
+    steps.push([cx - px, cy - py])
+    cx = px
+    cy = py
+  }
+  return steps.reverse()
+}
+
+// T키: 발견한 계단까지 자동으로 간다 (적이 보이면 멈춘다)
+export function travelToStairs(prev) {
+  if (blocked(prev)) return prev
+  const path = stairsPath(prev)
+  if (!path) {
+    const s = structuredClone(prev)
+    s.fx = []
+    log(s, '아직 계단을 찾지 못했다.')
+    return s
+  }
+  if (prev.monsters.some((m) => !m.dead && prev.visible[m.y][m.x])) {
+    const s = structuredClone(prev)
+    s.fx = []
+    log(s, '👀 적이 보여서 이동을 멈췄다.')
+    return s
+  }
+  let k = 0
+  return autoWalk(prev, () => path[k++] ?? null, path.length)
 }
 
 // E키: 돌 골렘 소환 (소환사 전용, 한 번에 한 마리)
