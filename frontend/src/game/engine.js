@@ -842,12 +842,18 @@ export function move(prev, dx, dy) {
 
 // ---- 여러 칸 자동 이동 (손가락을 덜 쓰게) ----
 // 한 칸씩 move()를 반복한다. 적이 보이거나, 아이템·상자·상점·계단 등 무슨 일이 생기면 멈춘다
-function autoWalk(prev, nextStep, maxSteps = 60) {
+function autoWalk(prev, nextStep, maxSteps = 60, stopBeforeStairs = false) {
   let state = prev
   const startDepth = prev.depth
   for (let i = 0; i < maxSteps; i++) {
     const dir = nextStep(state)
     if (!dir) break
+    // 달리기는 계단 앞에서 멈춘다 (계단 칸에는 올라가지 않는다)
+    if (stopBeforeStairs) {
+      const tx = state.player.x + dir[0]
+      const ty = state.player.y + dir[1]
+      if (state.tiles[ty]?.[tx] === '>' && state.explored[ty][tx]) break
+    }
     const before = state.logCount || 0
     const next = move(state, dir[0], dir[1])
     if (next === state) break // 벽이나 막힌 칸: 멈춘다
@@ -868,7 +874,7 @@ export function run(prev, dx, dy) {
     log(s, '👀 적이 보여서 달릴 수 없다.')
     return s
   }
-  return autoWalk(prev, () => [dx, dy])
+  return autoWalk(prev, () => [dx, dy], 60, true)
 }
 
 // 발견한 계단까지 가는 가장 짧은 길 (지나온 칸만 쓴다)
@@ -917,7 +923,7 @@ function stairsPath(state) {
   return steps.reverse()
 }
 
-// T키: 발견한 계단까지 자동으로 간다 (적이 보이면 멈춘다)
+// T키: 발견한 계단 앞까지 자동으로 간다 (적이 보이면 멈춘다)
 export function travelToStairs(prev) {
   if (blocked(prev)) return prev
   const path = stairsPath(prev)
@@ -934,7 +940,7 @@ export function travelToStairs(prev) {
     return s
   }
   let k = 0
-  return autoWalk(prev, () => path[k++] ?? null, path.length)
+  return autoWalk(prev, () => path[k++] ?? null, path.length, true)
 }
 
 // E키: 돌 골렘 소환 (소환사 전용, 한 번에 한 마리)
