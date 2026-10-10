@@ -32,9 +32,9 @@ const SHOT_DMG = 11
 
 // 검사 콤보 1~3단. from~to 구간에서만 타격이 들어간다
 export const ATTACKS = [
-  { dur: 0.3, from: 0.08, to: 0.2, range: 68, half: 0.95, dmg: 12, kb: 130, lunge: 50, hitstop: 0.04, shake: 5 },
-  { dur: 0.32, from: 0.08, to: 0.22, range: 76, half: 1.0, dmg: 14, kb: 170, lunge: 60, hitstop: 0.05, shake: 6 },
-  { dur: 0.5, from: 0.16, to: 0.34, range: 96, half: 1.3, dmg: 26, kb: 460, lunge: 110, hitstop: 0.12, shake: 14, finisher: true },
+  { dur: 0.3, from: 0.08, to: 0.2, range: 68, half: 0.95, dmg: 12, kb: 170, lunge: 50, hitstop: 0.04, shake: 5 },
+  { dur: 0.32, from: 0.08, to: 0.22, range: 76, half: 1.0, dmg: 14, kb: 220, lunge: 60, hitstop: 0.05, shake: 6 },
+  { dur: 0.5, from: 0.16, to: 0.34, range: 96, half: 1.3, dmg: 26, kb: 340, lunge: 110, hitstop: 0.12, shake: 14, finisher: true },
 ]
 
 export const ENEMY_TYPES = {
@@ -863,7 +863,8 @@ export function update(w, dt, input) {
       if (e.stagger > 0) e.stagger -= dt
       if (e.kx || e.ky) {
         moveBody(w, e, e.kx * dt, e.ky * dt)
-        const k = Math.exp(-dt * 9)
+        // 넉백은 감속을 완만하게 해서 실제로 멀리 밀려나게 한다 (거리 ≈ 속도 / 4.5)
+        const k = Math.exp(-dt * 4.5)
         e.kx *= k
         e.ky *= k
       }
@@ -894,7 +895,8 @@ export function update(w, dt, input) {
       } else if (e.state === 'recover') {
         e.cd -= dt
         if (e.cd <= 0) e.state = 'chase'
-      } else if (e.stagger <= 0) {
+      } else if (e.stagger <= 0 && Math.abs(e.kx) + Math.abs(e.ky) < 4) {
+        // 넉백이 끝난 뒤에만 다시 달려든다 (밀려나는 중에 끌려 돌아오지 않게)
         moveBody(w, e, (dx / d) * spec.speed * dt, (dy / d) * spec.speed * dt)
         e.x = clamp(e.x, e.r, Z.w - e.r)
         e.y = clamp(e.y, e.r, Z.h - e.r)
