@@ -13,6 +13,8 @@ import CardGame from './cards/CardGame'
 import LaneGame from './lane/LaneGame'
 import ShooterGame from './shooter/ShooterGame'
 import StoryGame from './story/StoryGame'
+import { ARKE_GAME } from './story/arkeData'
+import './story/arke.css'
 import ActionGame from './action/ActionGame'
 
 // 조작 명령: 키보드와 터치 버튼이 같은 동작을 하게 한다
@@ -919,6 +921,7 @@ function App() {
   if (screen === 'lane') return <LaneGame onExit={toSelect} />
   if (screen === 'shooter') return <ShooterGame onExit={toSelect} />
   if (screen === 'story') return <StoryGame onExit={toSelect} />
+  if (screen === 'arke') return <StoryGame game={ARKE_GAME} onExit={toSelect} />
   if (screen === 'action') return <ActionGame onExit={toSelect} />
   return <Roguelike onExit={toSelect} />
 }

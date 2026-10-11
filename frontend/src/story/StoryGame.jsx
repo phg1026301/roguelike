@@ -2,23 +2,40 @@ import { useEffect, useState } from 'react'
 import { SCENES, START_SCENE, START_STATS, STAT_NAMES, CODEX, ORIGINS } from './storyData'
 import { playSound, unlockSound, startMusic, stopMusic } from '../game/sound'
 import StoryArt from './StoryArt'
+import { STORY_BG_IMAGES } from './storyImages'
 import { PortraitSvg, PORTRAIT_SVG_NAMES } from './PortraitSvg'
 import './story.css'
 
-const SAVE_KEY = 'neon.save'
-function loadSave() {
+const NEON_SAVE_KEY = 'neon.save'
+function loadSave(key = NEON_SAVE_KEY) {
   try {
-    return JSON.parse(localStorage.getItem(SAVE_KEY) || 'null')
+    return JSON.parse(localStorage.getItem(key) || 'null')
   } catch {
     return null
   }
 }
-function writeSave(data) {
+function writeSave(data, key = NEON_SAVE_KEY) {
   try {
-    localStorage.setItem(SAVE_KEY, JSON.stringify(data))
+    localStorage.setItem(key, JSON.stringify(data))
   } catch {
     // 저장이 막혀 있어도 이야기는 계속된다
   }
+}
+
+// 네온 시티 기본 설정. 다른 이야기는 game prop으로 같은 형식의 설정을 넘긴다
+const NEON_GAME = {
+  title: '네온 시티',
+  saveKey: NEON_SAVE_KEY,
+  music: 'neon',
+  start: START_SCENE,
+  startStats: START_STATS,
+  statNames: STAT_NAMES,
+  scenes: SCENES,
+  codex: CODEX,
+  origins: ORIGINS,
+  images: STORY_BG_IMAGES,
+  portraits: null,
+  theme: '',
 }
 
 // 효과 적용: 숫자는 스탯에 더하고, true 값이나 set 키는 플래그를 켠다
@@ -45,38 +62,40 @@ function meets(req, stats, flags) {
 }
 
 // 장면 대사. 인트로에는 고른 출신에 맞는 한 줄을 끼워 넣는다
-function sceneLines(id, flags) {
-  const base = SCENES[id].lines
+function sceneLines(scenes, id, flags, origins) {
+  const base = scenes[id].lines
   if (id !== 'intro') return base
-  const o = ORIGINS.find((x) => flags[x.flag])
+  const o = origins.find((x) => flags[x.flag])
   if (!o) return base
   return [base[0], base[1], { who: '리코', text: o.line }, ...base.slice(2)]
 }
 
-export default function StoryGame({ onExit }) {
-  const [phase, setPhase] = useState('select') // 'select'(출신 고르기) | 'play'
-  const [scene, setScene] = useState(START_SCENE)
+export default function StoryGame({ onExit, game = NEON_GAME }) {
+  const G = game
+  const hasOrigins = G.origins.length > 0
+  const [phase, setPhase] = useState(hasOrigins ? 'select' : 'play') // 'select'(출신 고르기) | 'play'
+  const [scene, setScene] = useState(G.start)
   const [line, setLine] = useState(0)
-  const [stats, setStats] = useState(START_STATS)
+  const [stats, setStats] = useState(G.startStats)
   const [flags, setFlags] = useState({})
-  const [hasSave, setHasSave] = useState(() => !!loadSave())
+  const [hasSave, setHasSave] = useState(() => !!loadSave(G.saveKey))
   const [dice, setDice] = useState(null) // 해킹 판정 결과 메시지
   const [codex, setCodex] = useState(false) // 도감 열림 여부
 
-  const lines = sceneLines(scene, flags)
-  const cur = SCENES[scene]
+  const lines = sceneLines(G.scenes, scene, flags, G.origins)
+  const cur = G.scenes[scene]
   const lastLine = line >= lines.length - 1
   const visible = lastLine && cur.choices ? cur.choices.filter((c) => meets(c.req, stats, flags)) : []
 
   // 잔잔한 네온 시티 배경음악: 이 화면에 있는 동안만
   useEffect(() => {
-    startMusic('neon')
+    startMusic(G.music)
     return () => stopMusic()
   }, [])
 
   // 이어하기 저장: 이야기를 시작한 뒤에만 쓴다 (처음 열 때 기존 저장을 덮어쓰지 않도록)
   useEffect(() => {
-    if (phase === 'play') writeSave({ scene, stats, flags })
+    if (phase === 'play') writeSave({ scene, stats, flags }, G.saveKey)
   }, [phase, scene, stats, flags])
 
   useEffect(() => {
@@ -90,7 +109,7 @@ export default function StoryGame({ onExit }) {
       unlockSound()
       if (phase === 'select') {
         const n = Number(e.key)
-        if (n >= 1 && n <= ORIGINS.length) startNew(ORIGINS[n - 1])
+        if (n >= 1 && n <= G.origins.length) startNew(G.origins[n - 1])
         return
       }
       if (e.key === 'c' || e.key === 'C') {
@@ -118,9 +137,9 @@ export default function StoryGame({ onExit }) {
 
   // 출신을 고르고 처음부터 시작한다
   function startNew(o) {
-    setStats({ ...START_STATS, ...mergeBonus(o.bonus) })
+    setStats({ ...G.startStats, ...mergeBonus(o.bonus) })
     setFlags({ [o.flag]: true })
-    setScene(START_SCENE)
+    setScene(G.start)
     setLine(0)
     setDice(null)
     setPhase('play')
@@ -128,13 +147,13 @@ export default function StoryGame({ onExit }) {
 
   function mergeBonus(bonus) {
     const out = {}
-    for (const k of Object.keys(bonus)) out[k] = (START_STATS[k] || 0) + bonus[k]
+    for (const k of Object.keys(bonus)) out[k] = (G.startStats[k] || 0) + bonus[k]
     return out
   }
 
   // 장면으로 넘어갈 때 그 장면의 효과를 한 번만 적용한다
   function goto(id) {
-    const target = SCENES[id]
+    const target = G.scenes[id]
     if (target.effect) {
       setStats((prev) => applyEffect(prev, {}, target.effect).stats)
       setFlags((prev) => applyEffect({}, prev, target.effect).flags)
@@ -160,19 +179,19 @@ export default function StoryGame({ onExit }) {
   }
 
   function restart() {
-    setPhase('select')
-    setScene(START_SCENE)
+    setPhase(hasOrigins ? 'select' : 'play')
+    setScene(G.start)
     setLine(0)
-    setStats(START_STATS)
+    setStats(G.startStats)
     setFlags({})
     setDice(null)
   }
 
   function resume() {
-    const s = loadSave()
+    const s = loadSave(G.saveKey)
     if (!s) return
     setScene(s.scene)
-    setStats({ ...START_STATS, ...s.stats })
+    setStats({ ...G.startStats, ...s.stats })
     setFlags(s.flags || {})
     setLine(0)
     setPhase('play')
@@ -181,7 +200,7 @@ export default function StoryGame({ onExit }) {
   const choices = visible
   const speaker = lines[line]?.who
   const isEnding = !!cur.ending
-  const unlockedCodex = CODEX.filter((c) => flags[c.unlock])
+  const unlockedCodex = G.codex.filter((c) => flags[c.unlock])
 
   // 출신 고르기 화면
   if (phase === 'select') {
@@ -189,18 +208,18 @@ export default function StoryGame({ onExit }) {
       <div className="story-app bg-rain">
         <header className="st-head">
           <button className="back-btn" onClick={onExit}>← 게임 선택</button>
-          <h1>네온 시티</h1>
+          <h1>{G.title}</h1>
         </header>
         <div className="st-origin">
           <p className="st-origin-title">당신은 어디에서 왔나요?</p>
           <div className="st-origin-list">
-            {ORIGINS.map((o, i) => (
+            {G.origins.map((o, i) => (
               <button key={o.id} className="st-origin-card" onClick={() => startNew(o)}>
                 <div className="st-origin-name"><kbd>{i + 1}</kbd> {o.name}</div>
                 <div className="st-origin-sub">{o.sub}</div>
                 <p>{o.desc}</p>
                 <div className="st-origin-bonus">
-                  {Object.keys(o.bonus).map((k) => `${STAT_NAMES[k]} +${o.bonus[k]}`).join(' · ')}
+                  {Object.keys(o.bonus).map((k) => `${G.statNames[k]} +${o.bonus[k]}`).join(' · ')}
                 </div>
               </button>
             ))}
@@ -217,27 +236,32 @@ export default function StoryGame({ onExit }) {
   }
 
   return (
-    <div className={`story-app bg-${cur.bg}`}>
+    <div className={`story-app ${G.theme} bg-${cur.bg}`}>
       <header className="st-head">
         <button className="back-btn" onClick={onExit}>← 게임 선택</button>
-        <h1>네온 시티</h1>
+        <h1>{G.title}</h1>
         <div className="st-stats">
-          {Object.keys(STAT_NAMES).map((k) => (
-            <span key={k}>{STAT_NAMES[k]} <b>{stats[k] || 0}</b></span>
+          {Object.keys(G.statNames).map((k) => (
+            <span key={k}>{G.statNames[k]} <b>{stats[k] || 0}</b></span>
           ))}
         </div>
       </header>
 
       <div className="st-stage">
         <div className="st-art-wrap">
-          <StoryArt bg={cur.bg} />
+          <StoryArt bg={cur.bg} images={G.images} />
         </div>
         <div className="st-scene-tag">{isEnding ? `엔딩 · ${cur.ending}` : scene}</div>
         {dice && <div className="st-dice">{dice}</div>}
 
         <div className="st-box" onClick={() => { if (!lastLine) setLine((l) => l + 1) }}>
           <div className="st-row">
-            {PORTRAIT_SVG_NAMES.includes(speaker) && (
+            {G.portraits?.[speaker] && (
+              <div className="st-portrait-wrap">
+                <img className="st-portrait-img" src={G.portraits[speaker]} alt={speaker} />
+              </div>
+            )}
+            {!G.portraits?.[speaker] && PORTRAIT_SVG_NAMES.includes(speaker) && (
               <div className="st-portrait-wrap">
                 <PortraitSvg name={speaker} />
               </div>
@@ -276,7 +300,7 @@ export default function StoryGame({ onExit }) {
         {codex && (
           <div className="st-codex">
             <div className="st-codex-head">
-              <b>도감 · 떡밥 {unlockedCodex.length}/{CODEX.length}</b>
+              <b>도감 · 떡밥 {unlockedCodex.length}/{G.codex.length}</b>
               <button className="st-ghost" onClick={() => setCodex(false)}>닫기 (C)</button>
             </div>
             {unlockedCodex.length === 0 && <p className="st-codex-empty">아직 아무것도 알아내지 못했다. 이야기를 더 따라가 보자.</p>}
