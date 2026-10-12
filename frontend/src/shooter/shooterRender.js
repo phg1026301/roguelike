@@ -1,5 +1,5 @@
 // 탄환 소년의 화면 그리기: 굵은 외곽선, 밝은 색, 찌그러지는 움직임 (카툰 스타일)
-import { W, H, WALL_LIST, WEAPONS } from './shooterEngine'
+import { W, H, WALL_LIST, WEAPONS, DROP_INFO } from './shooterEngine'
 
 const LINE = '#2a1d17'
 const GRASS_A = '#9ad86f'
@@ -266,12 +266,64 @@ function drawHud(ctx, w) {
   }
 }
 
+// 파워업 오브: 깜빡이며 떠 있다가 사라지기 직전에 깜빡임이 빨라진다
+function drawDrop(ctx, d, t) {
+  if (d.life < 3 && Math.floor(t * 8) % 2 === 0) return
+  const info = DROP_INFO[d.type]
+  const bob = Math.sin(t * 5 + d.x) * 3
+  ctx.beginPath()
+  ctx.arc(d.x, d.y + bob, 12, 0, Math.PI * 2)
+  outlined(ctx, info.color, LINE, 3)
+  ctx.fillStyle = LINE
+  ctx.font = 'bold 15px sans-serif'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillText(info.icon, d.x, d.y + bob + 1)
+  ctx.textAlign = 'left'
+  ctx.textBaseline = 'top'
+}
+
+// 콤보 표시: 올라갈 때 살짝 커지고, 배율이 3배 이상이면 색이 바뀐다
+function drawCombo(ctx, w) {
+  if (w.combo >= 2 && w.comboT > 0) {
+    const mult = Math.min(5, 1 + Math.floor(w.combo / 5))
+    const pulse = 1 + Math.max(0, w.comboT - 2.0) * 0.6
+    ctx.save()
+    ctx.translate(W / 2, 110)
+    ctx.scale(pulse, pulse)
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.lineWidth = 7
+    ctx.strokeStyle = LINE
+    ctx.font = 'bold 34px sans-serif'
+    ctx.strokeText(`${w.combo} 콤보`, 0, 0)
+    ctx.fillStyle = mult >= 3 ? '#ff8a6b' : '#ffd447'
+    ctx.fillText(`${w.combo} 콤보`, 0, 0)
+    ctx.font = 'bold 18px sans-serif'
+    ctx.lineWidth = 5
+    ctx.strokeText(`점수 x${mult}`, 0, 34)
+    ctx.fillStyle = '#ffffff'
+    ctx.fillText(`점수 x${mult}`, 0, 34)
+    ctx.restore()
+  }
+  // 걸려 있는 효과 표시
+  const p = w.player
+  ctx.textAlign = 'left'
+  ctx.textBaseline = 'top'
+  ctx.font = 'bold 16px sans-serif'
+  ctx.fillStyle = LINE
+  let y = H - 100
+  if (p.rapid > 0) { ctx.fillText(`연사 ${Math.ceil(p.rapid)}초`, 22, y); y -= 22 }
+  if (p.shield > 0) ctx.fillText(`방어막 ${Math.ceil(p.shield)}초`, 22, y)
+}
+
 export function draw(ctx, w, t) {
   ctx.save()
   if (w.shake > 0) ctx.translate((Math.random() - 0.5) * w.shake, (Math.random() - 0.5) * w.shake)
   drawBackground(ctx, t)
   drawWalls(ctx)
   for (const c of w.coins) drawCoin(ctx, c, t)
+  for (const d of w.drops) drawDrop(ctx, d, t)
   const items = [
     ...w.enemies.map((e) => ({ y: e.y, f: () => drawEnemy(ctx, e, t) })),
     { y: w.player.y, f: () => drawPlayer(ctx, w.player, t) },
@@ -281,6 +333,7 @@ export function draw(ctx, w, t) {
   drawParticles(ctx, w.particles)
   ctx.restore()
   drawHud(ctx, w)
+  drawCombo(ctx, w)
   if (w.over) {
     ctx.fillStyle = 'rgba(20,12,18,0.55)'
     ctx.fillRect(0, 0, W, H)

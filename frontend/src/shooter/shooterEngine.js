@@ -4,6 +4,14 @@
 export const W = 960
 export const H = 540
 const PLAYER_SPEED = 230
+const BREAK_TIME = 0.8 // 웨이브 사이 쉬는 시간
+const DROP_CHANCE = 0.09 // 적을 잡았을 때 파워업이 나올 확률
+export const DROP_INFO = {
+  heal: { label: '체력 +1', color: '#ff4d6d', icon: '+' },
+  rapid: { label: '연사 6초', color: '#ffd447', icon: '»' },
+  shield: { label: '방어막 4초', color: '#7fe0ff', icon: 'S' },
+}
+const DROP_TYPES = Object.keys(DROP_INFO)
 
 // 장애물 (사각형). 캐릭터는 벽을 통과할 수 없다
 // 장애물은 최소로: 넓게 트인 전장에 작은 기둥 두 개만 둔다
@@ -25,18 +33,21 @@ export const ENEMIES = {
   goblin: { name: '고블린', r: 18, hp: 4, speed: 100, dmg: 1, color: '#6cc84a', coin: 2 },
   bat: { name: '박쥐', r: 13, hp: 2, speed: 160, dmg: 1, color: '#9a7fe6', coin: 2, erratic: true },
   orc: { name: '오크', r: 25, hp: 12, speed: 58, dmg: 2, color: '#b8a040', coin: 5 },
+  wolf: { name: '늑대', r: 15, hp: 3, speed: 190, dmg: 1, color: '#c9c9d6', coin: 3 },
+}
+
+// 웨이브가 올라갈수록 강한 적이 섞이고, 한 웨이브의 수가 늘어난다 (상한 60)
+function pickType(wave, r) {
+  if (wave >= 3 && r > 0.9) return 'orc'
+  if (wave >= 4 && r > 0.8) return 'wolf'
+  if (wave >= 2 && r > 0.7) return 'bat'
+  return r < 0.6 ? 'slime' : 'goblin'
 }
 
 function waveSpec(wave) {
   const list = []
-  const count = 8 + wave * 4
-  for (let i = 0; i < count; i++) {
-    const r = Math.random()
-    let type = r < 0.6 ? 'slime' : 'goblin'
-    if (wave >= 2 && r > 0.8) type = 'bat'
-    if (wave >= 3 && r > 0.9) type = 'orc'
-    list.push(type)
-  }
+  const count = Math.min(60, 8 + wave * 4)
+  for (let i = 0; i < count; i++) list.push(pickType(wave, Math.random()))
   return list
 }
 
@@ -54,7 +65,7 @@ function spawnPos() {
 export function createWorld() {
   return {
     t: 0,
-    player: { x: W / 2, y: 470, r: 16, hp: 5, maxHp: 5, face: { x: 1, y: 0 }, inv: 0, weapon: 'pistol', cd: 0, moving: false, walk: 0, squash: 0 },
+    player: { x: W / 2, y: 470, r: 16, hp: 5, maxHp: 5, face: { x: 1, y: 0 }, inv: 0, weapon: 'pistol', cd: 0, moving: false, walk: 0, squash: 0, rapid: 0, shield: 0 },
     bullets: [],
     enemies: [],
     coins: [],
@@ -65,6 +76,12 @@ export function createWorld() {
     score: 0,
     coinsGot: 0,
     kills: 0,
+    combo: 0,
+    comboT: 0,
+    bestCombo: 0,
+    hitstop: 0,
+    drops: [],
+    breaking: false,
     shake: 0,
     over: false,
     notice: '',
@@ -111,12 +128,23 @@ function steer(o, ux, uy, dist) {
 // 입력: { dx, dy } 이동 방향(-1~1), fire(발사 중), aim(조준 각도 또는 null)
 export function update(w, dt, input) {
   if (w.over) return w
+  // 타격감: 적을 잡은 순간 아주 짧게 멈춘다
+  if (w.hitstop > 0) {
+    w.hitstop -= dt
+    return w
+  }
   w.t += dt
   const p = w.player
   if (w.noticeT > 0) w.noticeT -= dt
   if (p.cd > 0) p.cd -= dt
   if (p.inv > 0) p.inv -= dt
   if (p.squash > 0) p.squash -= dt
+  if (p.rapid > 0) p.rapid -= dt
+  if (p.shield > 0) p.shield -= dt
+  if (w.comboT > 0) {
+    w.comboT -= dt
+    if (w.comboT <= 0) w.combo = 0
+  }
   if (w.shake > 0) w.shake = Math.max(0, w.shake - dt * 40)
 
   // 1) 플레이어 이동 (대각선도 같은 속도가 되도록 길이를 맞춘다)
@@ -142,7 +170,7 @@ export function update(w, dt, input) {
       const a = base + (wp.pellets === 1 ? 0 : (i / (wp.pellets - 1) - 0.5) * 2 * wp.spread) + (Math.random() - 0.5) * wp.spread * 0.3
       w.bullets.push({ x: p.x + Math.cos(a) * 22, y: p.y + Math.sin(a) * 22, vx: Math.cos(a) * wp.speed, vy: Math.sin(a) * wp.speed, life: wp.life, dmg: wp.dmg, color: wp.color, hit: new Set() })
     }
-    p.cd = wp.cd
+    p.cd = wp.cd * (p.rapid > 0 ? 0.5 : 1)
     w.shake = Math.max(w.shake, 2)
   }
 
@@ -227,6 +255,16 @@ export function update(w, dt, input) {
   }
   w.coins = w.coins.filter((c) => !c.dead && c.life > 0)
 
+  // 5-1) 파워업: 닿으면 바로 효과
+  for (const d of w.drops) {
+    d.life -= dt
+    if (Math.hypot(p.x - d.x, p.y - d.y) < p.r + 12) {
+      d.dead = true
+      applyDrop(w, d.type)
+    }
+  }
+  w.drops = w.drops.filter((d) => !d.dead && d.life > 0)
+
   // 6) 파티클
   for (const q of w.particles) {
     q.x += q.vx * dt
@@ -237,18 +275,26 @@ export function update(w, dt, input) {
   }
   w.particles = w.particles.filter((q) => q.life > 0)
 
-  // 7) 웨이브: 적을 다 잡으면 잠시 뒤 다음 웨이브
+  // 7) 웨이브: 적을 다 잡으면 짧게 쉬고 다음 웨이브 (끝없이 이어진다)
   if (w.queue.length === 0 && w.enemies.length === 0) {
+    if (!w.breaking) {
+      w.breaking = true
+      w.waveTimer = BREAK_TIME
+    }
     w.waveTimer -= dt
     if (w.waveTimer <= 0) {
+      w.breaking = false
       w.wave += 1
       w.queue = waveSpec(w.wave)
       w.waveTimer = 0.5
       notice(w, `웨이브 ${w.wave}!`)
       if (w.wave === 2) notice(w, '웨이브 2: 박쥐가 나온다!')
       if (w.wave === 3) notice(w, '웨이브 3: 오크가 나온다!')
+      if (w.wave === 4) notice(w, '웨이브 4: 늑대 무리가 온다!')
+      if (w.wave % 5 === 0) notice(w, `웨이브 ${w.wave}: 위기가 커진다!`)
     }
   } else if (w.queue.length > 0) {
+    w.breaking = false
     w.waveTimer -= dt
     if (w.waveTimer <= 0) {
       const type = w.queue.shift()
@@ -261,13 +307,36 @@ export function update(w, dt, input) {
   return w
 }
 
+// 콤보 배율: 5연속마다 한 단계 올라가고 최대 5배
+function comboMult(c) {
+  return Math.min(5, 1 + Math.floor(c / 5))
+}
+
+function applyDrop(w, type) {
+  const p = w.player
+  if (type === 'heal') p.hp = Math.min(p.maxHp, p.hp + 1)
+  if (type === 'rapid') p.rapid = 6
+  if (type === 'shield') { p.shield = 4; p.inv = Math.max(p.inv, 4) }
+  notice(w, DROP_INFO[type].label)
+  burst(w, p.x, p.y, DROP_INFO[type].color, 12)
+}
+
 function killEnemy(w, e) {
   e.dead = true
   w.kills += 1
-  w.score += e.coin * 10
+  w.combo += 1
+  w.comboT = 2.2
+  w.bestCombo = Math.max(w.bestCombo, w.combo)
+  w.score += e.coin * 10 * comboMult(w.combo)
+  w.hitstop = Math.max(w.hitstop, 0.045)
+  w.shake = Math.max(w.shake, 5)
   burst(w, e.x, e.y, e.color, 14)
   for (let i = 0; i < e.coin; i++) {
     w.coins.push({ x: e.x + (Math.random() - 0.5) * 30, y: e.y + (Math.random() - 0.5) * 30, v: 1, life: 8 })
+  }
+  if (Math.random() < DROP_CHANCE) {
+    const type = DROP_TYPES[Math.floor(Math.random() * DROP_TYPES.length)]
+    w.drops.push({ x: e.x, y: e.y, type, life: 10 })
   }
 }
 
