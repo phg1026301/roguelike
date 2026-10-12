@@ -72,6 +72,15 @@ const GAMES = [
     color: '#c9b8ff',
   },
   {
+    id: 'road',
+    no: 9,
+    name: '항로 0417',
+    genre: '스토리 · 우주 항로 (시즌 1)',
+    desc: '변방 정거장에서 시작해 중앙 항성과 지워진 행성까지. 우주 항로의 기억 공백을 파헤쳐요.',
+    sprite: 'merchant',
+    color: '#7fb8ff',
+  },
+  {
     id: 'action',
     no: 7,
     name: '검의 길',

@@ -249,7 +249,7 @@ export default function StoryGame({ onExit, game = NEON_GAME }) {
 
       <div className="st-stage">
         <div className="st-art-wrap">
-          <StoryArt bg={cur.bg} images={G.images} />
+          {G.art !== false && <StoryArt bg={cur.bg} images={G.images} />}
         </div>
         <div className="st-scene-tag">{isEnding ? `엔딩 · ${cur.ending}` : scene}</div>
         {dice && <div className="st-dice">{dice}</div>}
