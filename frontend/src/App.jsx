@@ -18,6 +18,7 @@ import './story/arke.css'
 import { ROAD_GAME } from './story/roadData'
 import './story/road.css'
 import ActionGame from './action/ActionGame'
+import ForestQuest from './forest/ForestQuest'
 
 // 조작 명령: 키보드와 터치 버튼이 같은 동작을 하게 한다
 const COMMANDS = {
@@ -926,6 +927,7 @@ function App() {
   if (screen === 'arke') return <StoryGame game={ARKE_GAME} onExit={toSelect} />
   if (screen === 'road') return <StoryGame game={ROAD_GAME} onExit={toSelect} />
   if (screen === 'action') return <ActionGame onExit={toSelect} />
+  if (screen === 'forest') return <ForestQuest onExit={toSelect} />
   return <Roguelike onExit={toSelect} />
 }
 

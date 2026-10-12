@@ -89,6 +89,16 @@ const GAMES = [
     color: '#7fb8ff',
   },
   {
+    id: 'forest',
+    no: 10,
+    name: '숲의 여정',
+    folder: 'action',
+    genre: '횡스크롤 · 액션 RPG (프로토타입)',
+    desc: '마을에서 출발해 숲의 버섯과 박쥐를 잡아 레벨을 올리고, 숲의 보스를 쓰러뜨려요.',
+    sprite: 'warrior',
+    color: '#8fe39a',
+  },
+  {
     id: 'action',
     no: 7,
     name: '검의 길',
