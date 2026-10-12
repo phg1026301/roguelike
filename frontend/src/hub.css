@@ -146,3 +146,45 @@
   font-weight: 700;
   color: var(--game);
 }
+
+/* 장르 폴더 카드 */
+.folder-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 20px;
+}
+.folder-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  background: #17121f;
+  border: 2px solid #3a2d52;
+  border-radius: 14px;
+  padding: 26px 18px 20px;
+  color: #ddd;
+  font: inherit;
+  text-align: center;
+  cursor: pointer;
+  transition: transform 0.15s, border-color 0.15s, box-shadow 0.15s;
+}
+.folder-card:hover,
+.folder-card:focus-visible {
+  transform: translateY(-4px);
+  border-color: var(--game);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45), 0 0 0 1px var(--game);
+  outline: none;
+}
+.folder-no {
+  position: absolute;
+  top: 10px;
+  left: 12px;
+  font-family: 'Press Start 2P', monospace;
+  font-size: 11px;
+  color: var(--game);
+}
+.folder-icon { font-size: 44px; }
+.folder-name { font-size: 18px; color: var(--game); }
+.folder-desc { font-size: 13px; color: #9a92ab; }
+.folder-count { font-size: 12px; color: #7d7590; }
