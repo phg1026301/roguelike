@@ -99,6 +99,16 @@ const GAMES = [
     color: '#8fe39a',
   },
   {
+    id: 'gostop',
+    no: 11,
+    name: '고스톱',
+    folder: 'turn',
+    genre: '카드 · 화투 (컴퓨터와 대결)',
+    desc: '화투 48장으로 같은 달 카드를 맞춰 점수를 모아요. 7점 이상이면 고 또는 스톱을 고를 수 있어요.',
+    sprite: 'merchant',
+    color: '#f5a6c8',
+  },
+  {
     id: 'action',
     no: 7,
     name: '검의 길',

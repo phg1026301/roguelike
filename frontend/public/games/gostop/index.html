@@ -1,0 +1,336 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>고스톱</title>
+<style>
+  body{margin:0;background:#0b3d24;color:#f2fff6;font-family:system-ui,"Malgun Gothic",sans-serif;min-height:100vh;display:flex;flex-direction:column;align-items:center}
+  h1{font-size:16px;margin:12px 0 4px}
+  #app{width:100%;max-width:820px;padding:8px 12px 24px;box-sizing:border-box}
+  .bar{display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px;font-size:14px;margin-bottom:6px}
+  .label{font-size:13px;color:#bfe9cf;margin:10px 0 4px}
+  .cards{display:flex;flex-wrap:wrap;gap:6px;min-height:92px;align-items:flex-end}
+  .card{width:64px;height:90px;border-radius:6px;background:#fffdf5;color:#222;border:2px solid #555;display:flex;flex-direction:column;align-items:center;justify-content:space-between;padding:4px 2px;box-sizing:border-box;font-size:12px;user-select:none}
+  .card b{font-size:15px}
+  .card small{font-size:11px;color:#555;text-align:center;line-height:1.2}
+  .card.gw{background:#fff3b0}
+  .card.yeol{background:#ffd9d9}
+  .card.tti{background:#d9e8ff}
+  .card.pi{background:#f1f1f1}
+  .card.back{background:#2a5ea0;color:#fff;justify-content:center;border-color:#143a6a;font-size:13px}
+  .card.click{cursor:pointer;outline:2px solid #ffe066}
+  .card.click:hover{transform:translateY(-4px)}
+  .card.dim{opacity:.45}
+  .btns{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin:10px 0}
+  button{padding:10px 18px;border:0;border-radius:8px;background:#f2c94c;color:#222;font-size:15px;font-weight:700;cursor:pointer}
+  button.ghost{background:#2a5a3f;color:#f2fff6}
+  #msg{min-height:42px;text-align:center;font-size:15px;margin:10px 0;background:rgba(0,0,0,.28);padding:10px;border-radius:8px;line-height:1.5}
+  .help{font-size:12px;color:#9fd8b5;text-align:center;margin-top:12px;line-height:1.7}
+</style>
+</head>
+<body>
+<h1>고스톱 · 컴퓨터와 대결</h1>
+<div id="app"></div>
+<div class="help">손패에서 같은 달 카드를 바닥 카드와 맞추면 가져갑니다 · 7점 이상이면 고(계속) 또는 스톱(끝내고 점수 받기)을 고를 수 있어요<br>먼저 20점을 얻으면 이깁니다. 간략화한 규칙입니다 (뻑, 쪽, 흔들기 없음).</div>
+<script>
+const TYPE_NAME = { gw: '광', yeol: '열끗', tti: '띠', pi: '피' }
+const MONTH_NAME = ['', '1월', '2월', '3월', '4월', '5월', '6월', '7월', '8월', '9월', '10월', '11월', '12월']
+const WIN = 20
+const GO_MIN = 7
+
+// 화투 48장 (월 4장씩, 11·12월은 쌍피 포함)
+function makeDeck() {
+  const d = []
+  const A = (m, type, name, x) => d.push(Object.assign({ m, type, name }, x || {}))
+  A(1, 'gw', '송학 광'); A(1, 'tti', '송학 홍단', { tt: 'hong' }); A(1, 'pi', '피'); A(1, 'pi', '피')
+  A(2, 'yeol', '매조 새', { bird: 1 }); A(2, 'tti', '매조 홍단', { tt: 'hong' }); A(2, 'pi', '피'); A(2, 'pi', '피')
+  A(3, 'gw', '벚꽃 광'); A(3, 'tti', '벚꽃 홍단', { tt: 'hong' }); A(3, 'pi', '피'); A(3, 'pi', '피')
+  A(4, 'yeol', '흑싸리 두견'); A(4, 'tti', '흑싸리 초단', { tt: 'cho' }); A(4, 'pi', '피'); A(4, 'pi', '피')
+  A(5, 'yeol', '난초 뻐꾸기', { bird: 1 }); A(5, 'tti', '난초 초단', { tt: 'cho' }); A(5, 'pi', '피'); A(5, 'pi', '피')
+  A(6, 'yeol', '모란 나비'); A(6, 'tti', '모란 청단', { tt: 'cheong' }); A(6, 'pi', '피'); A(6, 'pi', '피')
+  A(7, 'yeol', '홍싸리 멧돼지'); A(7, 'tti', '홍싸리 초단', { tt: 'cho' }); A(7, 'pi', '피'); A(7, 'pi', '피')
+  A(8, 'gw', '공산 광'); A(8, 'yeol', '공산 기러기', { bird: 1 }); A(8, 'pi', '피'); A(8, 'pi', '피')
+  A(9, 'yeol', '국진 술잔'); A(9, 'tti', '국진 청단', { tt: 'cheong' }); A(9, 'pi', '피'); A(9, 'pi', '피')
+  A(10, 'yeol', '단풍 사슴'); A(10, 'tti', '단풍 청단', { tt: 'cheong' }); A(10, 'pi', '피'); A(10, 'pi', '피')
+  A(11, 'gw', '오동 광'); A(11, 'pi', '피'); A(11, 'pi', '피'); A(11, 'pi', '쌍피', { ss: 1 })
+  A(12, 'gw', '비광', { rain: 1 }); A(12, 'yeol', '제비'); A(12, 'pi', '피'); A(12, 'pi', '쌍피', { ss: 1 })
+  return d
+}
+
+function shuffle(a) {
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]]
+  }
+  return a
+}
+
+// 점수 계산 (간략화): 광, 열끗(고도리 포함), 띠(홍단·청단·초단), 피
+function score(cap) {
+  let pts = 0
+  const g = cap.filter(c => c.type === 'gw')
+  if (g.length >= 3) {
+    const rain = g.some(c => c.rain)
+    pts += g.length === 3 ? (rain ? 2 : 3) : g.length === 4 ? 4 : 15
+  }
+  const y = cap.filter(c => c.type === 'yeol')
+  if (y.length >= 5) pts += y.length - 4
+  if (cap.filter(c => c.bird).length === 3) pts += 5
+  const t = cap.filter(c => c.type === 'tti')
+  if (t.length >= 3) pts += t.length
+  for (const set of ['hong', 'cheong', 'cho']) {
+    if (t.filter(c => c.tt === set).length === 3) pts += 3
+  }
+  const p = cap.reduce((s, c) => s + (c.type === 'pi' ? (c.ss ? 2 : 1) : 0), 0)
+  if (p >= 10) pts += p - 9
+  return pts
+}
+
+// 컴퓨터가 카드를 고를 때 쓰는 가치
+function cardValue(c) {
+  if (c.type === 'gw') return 3
+  if (c.type === 'yeol' || c.type === 'tti') return 2
+  return c.ss ? 2 : 1
+}
+
+let S = null
+
+function newGame() {
+  S = { total: [0, 0], lastWin: 'me', round: 0 }
+  deal()
+}
+
+function deal() {
+  const d = shuffle(makeDeck())
+  S.hand = [d.splice(0, 7), d.splice(0, 7)]
+  S.floor = d.splice(0, 6)
+  S.deck = d
+  S.cap = [[], []]
+  S.go = [0, 0]
+  S.askedAt = 0
+  S.pending = null
+  S.phase = 'hand'
+  S.round += 1
+  S.turn = S.lastWin === 'cpu' ? 1 : 0
+  S.msg = S.turn === 0 ? '내 차례입니다. 손패에서 카드를 고르세요.' : '컴퓨터가 먼저 시작합니다.'
+  if (S.turn === 1) setTimeout(cpuTurn, 900)
+  render()
+}
+
+// 바닥에 같은 달 카드가 있으면 가져간다
+// 한 장만 맞으면 자동, 여러 장이면 사람은 고르고 컴퓨터는 첫 장을 고른다
+function playCard(who, card, stage) {
+  const opts = S.floor.filter(f => f.m === card.m)
+  if (opts.length === 0) {
+    S.floor.push(card)
+    return null
+  }
+  if (opts.length === 1 || who === 1) {
+    take(who, card, opts[0])
+    return null
+  }
+  return { who, card, stage, opts }
+}
+
+function take(who, card, target) {
+  S.floor = S.floor.filter(f => f !== target)
+  S.cap[who].push(card, target)
+}
+
+function humanPlay(i) {
+  if (S.turn !== 0 || S.phase !== 'hand' || S.pending) return
+  const card = S.hand[0][i]
+  if (!card) return
+  S.hand[0].splice(i, 1)
+  const ch = playCard(0, card, 'hand')
+  if (ch) {
+    S.pending = ch
+    S.msg = `${MONTH_NAME[card.m]} 카드와 맞출 바닥 카드를 고르세요.`
+    render()
+    return
+  }
+  drawStep(0)
+}
+
+function chooseFloor(i) {
+  const p = S.pending
+  if (!p) return
+  const target = S.floor[i]
+  if (!p.opts.includes(target)) return
+  take(p.who, p.card, target)
+  S.pending = null
+  if (p.stage === 'hand') drawStep(p.who)
+  else finishTurn(p.who)
+}
+
+// 덱에서 한 장 뒤집어 같은 방식으로 처리
+function drawStep(who) {
+  if (S.deck.length === 0) return finishTurn(who)
+  const d = S.deck.pop()
+  const ch = playCard(who, d, 'draw')
+  if (ch) {
+    S.pending = ch
+    S.msg = `뒤집은 ${MONTH_NAME[d.m]} 카드와 맞출 바닥 카드를 고르세요.`
+    render()
+    return
+  }
+  finishTurn(who)
+}
+
+function finishTurn(who) {
+  if (who === 0) {
+    const sc = score(S.cap[0])
+    if (sc >= GO_MIN && sc > S.askedAt) {
+      S.phase = 'ask'
+      S.askedAt = sc
+      S.msg = `${sc}점! 고(계속)할까요, 스톱(끝내고 점수 받기)할까요?`
+      render()
+      return
+    }
+    nextTurn()
+  } else {
+    if (score(S.cap[1]) >= GO_MIN) return endRound(1)
+    nextTurn()
+  }
+}
+
+function nextTurn() {
+  if (S.hand[0].length === 0 && S.hand[1].length === 0) return endRound(null)
+  S.turn = 1 - S.turn
+  S.phase = 'hand'
+  if (S.turn === 1) {
+    S.msg = '컴퓨터 차례...'
+    setTimeout(cpuTurn, 900)
+  } else {
+    S.msg = '내 차례입니다. 손패에서 카드를 고르세요.'
+  }
+  render()
+}
+
+// 컴퓨터: 바닥에 맞출 수 있는 카드를 우선, 아니면 가치가 낮은 카드를 버린다
+function cpuTurn() {
+  if (S.turn !== 1 || S.phase !== 'hand' || S.pending) return
+  const hand = S.hand[1]
+  if (hand.length === 0) return nextTurn()
+  let bestIdx = 0, bestScore = -Infinity
+  hand.forEach((c, idx) => {
+    const can = S.floor.some(f => f.m === c.m)
+    const sc = can ? 10 + cardValue(c) : -cardValue(c)
+    if (sc > bestScore) { bestScore = sc; bestIdx = idx }
+  })
+  const card = hand.splice(bestIdx, 1)[0]
+  playCard(1, card, 'hand')
+  S.msg = `컴퓨터가 ${MONTH_NAME[card.m]} ${card.name}을(를) 냈어요.`
+  drawStep(1)
+  if (S.phase === 'hand' && S.turn === 1) render()
+}
+
+function goAction(stop) {
+  if (S.phase !== 'ask') return
+  if (stop) return endRound(0)
+  S.go[0] += 1
+  S.phase = 'hand'
+  S.msg = `고! 계속합니다. (${S.go[0]}고)`
+  nextTurn()
+}
+
+function endRound(w) {
+  const s = [score(S.cap[0]), score(S.cap[1])]
+  let text
+  if (w === 0) {
+    const pts = s[0] + S.go[0]
+    S.total[0] += pts
+    S.lastWin = 'me'
+    text = `스톱! 내가 ${pts}점을 얻었어요.`
+  } else if (w === 1) {
+    S.total[1] += s[1]
+    S.lastWin = 'cpu'
+    text = `컴퓨터가 스톱! 컴퓨터가 ${s[1]}점을 얻었어요.`
+  } else {
+    S.total[0] += s[0]
+    S.total[1] += s[1]
+    S.lastWin = s[0] >= s[1] ? 'me' : 'cpu'
+    text = `카드를 모두 썼어요. 내 ${s[0]}점 · 컴퓨터 ${s[1]}점`
+  }
+  S.phase = S.total.some(t => t >= WIN) ? 'gameover' : 'over'
+  if (S.phase === 'gameover') {
+    text += S.total[0] >= WIN ? ' 🎉 내가 이겼어요!' : ' 컴퓨터가 이겼어요.'
+  }
+  S.msg = text
+  render()
+}
+
+// ---------- 그리기 ----------
+function cardHTML(c, cls, attr) {
+  return `<div class="card ${c.type} ${cls || ''}" ${attr || ''}><small>${MONTH_NAME[c.m]}</small><b>${TYPE_NAME[c.type]}</b><small>${c.name}</small></div>`
+}
+
+function summary(cap) {
+  const n = t => cap.filter(c => c.type === t).length
+  const pi = cap.reduce((s, c) => s + (c.type === 'pi' ? (c.ss ? 2 : 1) : 0), 0)
+  return `광 ${n('gw')} · 열끗 ${n('yeol')} · 띠 ${n('tti')} · 피 ${pi}`
+}
+
+function render() {
+  const app = document.getElementById('app')
+  const myCanTurn = S.turn === 0 && S.phase === 'hand' && !S.pending
+  const pickFloor = S.pending ? new Set(S.pending.opts) : null
+
+  const cpuHand = S.hand[1].map(() => '<div class="card back">화투</div>').join('')
+  const floor = S.floor.map((c, i) => {
+    const clickable = pickFloor && pickFloor.has(c)
+    const dim = S.pending && !clickable
+    return cardHTML(c, (clickable ? 'click' : '') + (dim ? ' dim' : ''), clickable ? `data-f="${i}"` : '')
+  }).join('')
+  const myCap = S.cap[0].map(c => cardHTML(c, '', '')).join('')
+  const myHand = S.hand[0].map((c, i) => cardHTML(c, myCanTurn ? 'click' : '', myCanTurn ? `data-h="${i}"` : '')).join('')
+
+  let btns = ''
+  if (S.phase === 'ask') {
+    btns = `<button data-act="go">고 (계속)</button><button class="ghost" data-act="stop">스톱 (점수 받기)</button>`
+  } else if (S.phase === 'over') {
+    btns = `<button data-act="next">다음 판</button>`
+  } else if (S.phase === 'gameover') {
+    btns = `<button data-act="restart">새 게임</button>`
+  }
+
+  app.innerHTML = `
+    <div class="bar">
+      <span>라운드 ${S.round}</span>
+      <span>내 점수 <b>${S.total[0]}</b> · 컴퓨터 <b>${S.total[1]}</b> (목표 ${WIN}점)</span>
+      <span>바닥 ${S.floor.length}장 · 덱 ${S.deck ? S.deck.length : 0}장</span>
+    </div>
+    <div class="label">컴퓨터 손패 (${S.hand[1].length}장)</div>
+    <div class="cards">${cpuHand}</div>
+    <div class="label">컴퓨터 획득: ${summary(S.cap[1])}</div>
+    <div class="label">바닥 카드 ${pickFloor ? '(맞출 카드를 고르세요)' : ''}</div>
+    <div class="cards">${floor}</div>
+    <div class="label">내 획득: ${summary(S.cap[0])} · 현재 ${score(S.cap[0])}점</div>
+    <div class="cards">${myCap}</div>
+    <div class="label">내 손패 ${myCanTurn ? '(카드를 누르세요)' : ''}</div>
+    <div class="cards">${myHand}</div>
+    <div id="msg">${S.msg || ''}</div>
+    <div class="btns">${btns}</div>
+  `
+}
+
+// ---------- 입력 ----------
+document.getElementById('app').addEventListener('click', (e) => {
+  const h = e.target.closest('[data-h]')
+  if (h) return humanPlay(Number(h.dataset.h))
+  const f = e.target.closest('[data-f]')
+  if (f) return chooseFloor(Number(f.dataset.f))
+  const b = e.target.closest('[data-act]')
+  if (!b) return
+  const act = b.dataset.act
+  if (act === 'go') goAction(false)
+  else if (act === 'stop') goAction(true)
+  else if (act === 'next') deal()
+  else if (act === 'restart') { S = null; newGame() }
+})
+
+newGame()
+</script>
+</body>
+</html>
