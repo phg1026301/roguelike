@@ -1,0 +1,393 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>불과 물</title>
+<style>
+  body{margin:0;background:#0b0b1e;color:#eef;font-family:system-ui,"Malgun Gothic",sans-serif;min-height:100vh;display:flex;flex-direction:column;align-items:center}
+  h1{font-size:15px;margin:10px 0 8px}
+  canvas{width:100%;max-width:960px;height:auto;display:block;border-radius:8px;background:#000;touch-action:none}
+  .help{font-size:13px;color:#9fb3ff;margin:8px 16px 16px;text-align:center;line-height:1.7}
+</style>
+</head>
+<body>
+<h1>불과 물 · 두 명이 한 키보드로 (2인용)</h1>
+<canvas id="c" width="960" height="512"></canvas>
+<div class="help">
+  🔥 불 캐릭터: ← → 이동, ↑ 점프 &nbsp;|&nbsp; 💧 물 캐릭터: A D 이동, W 점프<br>
+  불은 물웅덩이에, 물은 불웅덩이에 닿으면 죽어요. 보석을 모으고 두 캐릭터가 각자 문에 도착하면 다음 판입니다.
+</div>
+<script>
+const cv = document.getElementById('c')
+const ctx = cv.getContext('2d')
+const T = 32, COLS = 30, ROWS = 16
+const W = COLS * T, H = ROWS * T
+const G = 1400, MOVE = 200, JUMP = 560
+
+const keys = {}
+let pressed = {}
+
+// 판 설계: 발판, 웅덩이, 문, 보석, 판(P)과 문틀(D)을 적으면 격자를 만든다
+// 웅덩이 F = 물에게 위험, W = 불에게 위험 (바닥 한 줄 높이)
+const LEVELS = [
+  {
+    name: '1판 · 웅덩이 건너기',
+    plats: [[2, 11, 3], [25, 11, 3]],
+    pools: [[10, 14, 3, 'F'], [18, 14, 3, 'W']],
+    fire: [3, 14], water: [6, 14],
+    doors: { K: [27, 14], L: [28, 14] },
+    gems: [[3, 10, 'r'], [26, 10, 'b']],
+    plates: [], gates: [],
+  },
+  {
+    name: '2판 · 발판을 누르고 같이 지나가요',
+    plats: [[1, 11, 2], [26, 11, 2]],
+    pools: [[8, 14, 2, 'W'], [20, 14, 2, 'F']],
+    fire: [2, 14], water: [3, 14],
+    doors: { K: [25, 14], L: [24, 14] },
+    gems: [[2, 10, 'b'], [27, 10, 'r']],
+    plates: [[4, 14], [16, 14]],
+    gates: [[12, 11, 14]], // 열린 발판이 하나라도 있으면 문틀이 열린다
+  },
+  {
+    name: '3판 · 계단을 함께 오르자',
+    plats: [[4, 12, 3], [9, 10, 3], [14, 8, 4], [19, 6, 4]],
+    pools: [[16, 14, 2, 'W'], [21, 14, 2, 'F']],
+    fire: [1, 14], water: [2, 14],
+    doors: { K: [20, 5], L: [21, 5] },
+    gems: [[5, 11, 'r'], [10, 9, 'b'], [15, 7, 'r'], [22, 4, 'b']],
+    plates: [],
+    gates: [],
+  },
+]
+
+// 판 하나를 격자로 만든다
+function buildGrid(L) {
+  const g = []
+  for (let r = 0; r < ROWS; r++) {
+    g.push([])
+    for (let c = 0; c < COLS; c++) {
+      g[r].push(r === 0 || r === ROWS - 1 || c === 0 || c === COLS - 1 ? '#' : '.')
+    }
+  }
+  for (const [x, y, w] of L.plats) for (let i = 0; i < w; i++) g[y][x + i] = '#'
+  for (const [x, y, w, t] of L.pools) for (let i = 0; i < w; i++) g[y][x + i] = t
+  for (const [x, y] of L.plates) g[y][x] = 'P'
+  for (const [x, y1, y2] of L.gates) for (let y = y1; y <= y2; y++) g[y][x] = 'D'
+  for (const k of Object.keys(L.doors)) { const [x, y] = L.doors[k]; g[y][x] = k }
+  for (const [x, y, t] of L.gems) g[y][x] = t
+  return g
+}
+
+let S = null
+
+function newLevel(idx) {
+  const L = LEVELS[idx]
+  S = {
+    idx, grid: buildGrid(L), t: 0, gateOpen: false,
+    fire: mkChar('fire', L.fire), water: mkChar('water', L.water),
+    gems: { r: 0, b: 0 }, deadT: 0, doneT: 0, won: false, msg: L.name, msgT: 2.5,
+    particles: [],
+  }
+  S.total = countGems(S.grid)
+}
+function mkChar(kind, pos) {
+  return { kind, x: pos[0] * T + 4, y: pos[1] * T - 28 + 4, w: 24, h: 28, vx: 0, vy: 0, onGround: false, arrived: false, startX: pos[0] * T + 4, startY: pos[1] * T - 28 + 4 }
+}
+function countGems(g) {
+  let r = 0, b = 0
+  for (const row of g) for (const t of row) { if (t === 'r') r++; if (t === 'b') b++ }
+  return { r, b }
+}
+
+function solid(c, r) {
+  const t = S.grid[r] && S.grid[r][c]
+  if (t === undefined) return true
+  return t === '#' || (t === 'D' && !S.gateOpen)
+}
+
+// 한 축으로 움직이며 벽에 부딪히면 멈춘다
+function moveAxis(p, axis, amt) {
+  if (axis === 'x') {
+    p.x += amt
+    const c0 = Math.floor(p.x / T), c1 = Math.ceil((p.x + p.w) / T) - 1
+    const r0 = Math.floor(p.y / T), r1 = Math.ceil((p.y + p.h) / T) - 1
+    for (let r = r0; r <= r1; r++) for (let c = c0; c <= c1; c++) {
+      if (solid(c, r)) {
+        p.x = amt > 0 ? c * T - p.w : (c + 1) * T
+        p.vx = 0
+        return
+      }
+    }
+  } else {
+    p.y += amt
+    const c0 = Math.floor(p.x / T), c1 = Math.ceil((p.x + p.w) / T) - 1
+    const r0 = Math.floor(p.y / T), r1 = Math.ceil((p.y + p.h) / T) - 1
+    for (let r = r0; r <= r1; r++) for (let c = c0; c <= c1; c++) {
+      if (solid(c, r)) {
+        if (amt > 0) { p.y = r * T - p.h; p.onGround = true }
+        else p.y = (r + 1) * T
+        p.vy = 0
+        return
+      }
+    }
+  }
+}
+
+// 캐릭터가 겹치는 칸들의 종류를 본다
+function tilesOver(p, fn) {
+  const c0 = Math.floor((p.x + 3) / T), c1 = Math.ceil((p.x + p.w - 4) / T) - 1
+  const r0 = Math.floor((p.y + 3) / T), r1 = Math.ceil((p.y + p.h - 4) / T) - 1
+  for (let r = r0; r <= r1; r++) for (let c = c0; c <= c1; c++) {
+    const t = S.grid[r] && S.grid[r][c]
+    if (t !== undefined) fn(t, c, r)
+  }
+}
+
+function step(p, dt, left, right, jump) {
+  if (p.dead) return
+  p.vx = ((right ? 1 : 0) - (left ? 1 : 0)) * MOVE
+  if (jump && p.onGround) { p.vy = -JUMP; p.onGround = false }
+  p.vy += G * dt
+  if (p.vy > 900) p.vy = 900
+  p.onGround = false
+  moveAxis(p, 'x', p.vx * dt)
+  moveAxis(p, 'y', p.vy * dt)
+}
+
+function burst(x, y, color, n) {
+  for (let i = 0; i < n; i++) {
+    S.particles.push({ x, y, vx: (Math.random() - 0.5) * 160, vy: -Math.random() * 160, life: 0.5 + Math.random() * 0.3, color })
+  }
+}
+
+function die(p, why) {
+  if (S.deadT > 0 || S.won) return
+  S.deadT = 0.9
+  S.msg = why
+  S.msgT = 1.6
+  burst(p.x + p.w / 2, p.y + p.h / 2, p.kind === 'fire' ? '#ff7a3a' : '#5ab0ff', 18)
+}
+
+function update(dt) {
+  S.t += dt
+  S.msgT = Math.max(0, S.msgT - dt)
+  for (const q of S.particles) { q.life -= dt; q.vy += 500 * dt; q.x += q.vx * dt; q.y += q.vy * dt }
+  S.particles = S.particles.filter(q => q.life > 0)
+
+  if (S.deadT > 0) {
+    S.deadT -= dt
+    if (S.deadT <= 0) newLevel(S.idx)
+    pressed = {}
+    return
+  }
+  if (S.won) {
+    S.doneT -= dt
+    if (S.doneT <= 0) {
+      if (S.idx + 1 < LEVELS.length) newLevel(S.idx + 1)
+      else { S.allDone = true }
+    }
+    pressed = {}
+    return
+  }
+
+  // 판을 누르고 있는 캐릭터가 있으면 문틀이 열린다
+  const plates = []
+  for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) if (S.grid[r][c] === 'P') plates.push([c, r])
+  S.gateOpen = false
+  for (const p of [S.fire, S.water]) {
+    for (const [c, r] of plates) {
+      if (p.x + p.w > c * T + 4 && p.x < c * T + T - 4 && p.y + p.h > r * T && p.y < r * T + T) S.gateOpen = true
+    }
+  }
+
+  step(S.fire, dt, keys.ArrowLeft, keys.ArrowRight, pressed.ArrowUp)
+  step(S.water, dt, keys.KeyA, keys.KeyD, pressed.KeyW)
+
+  for (const p of [S.fire, S.water]) {
+    if (p.y > H) die(p, p.kind === 'fire' ? '불꽃이 떨어졌어요' : '물방울이 떨어졌어요')
+    const hazard = p.kind === 'fire' ? 'W' : 'F' // 불은 물웅덩이, 물은 불웅덩이에서 죽는다
+    tilesOver(p, (t, c, r) => {
+      if (t === hazard) die(p, p.kind === 'fire' ? '불이 물에 닿아 꺼졌어요' : '물이 불에 닿아 증발했어요')
+      if (t === (p.kind === 'fire' ? 'r' : 'b')) {
+        S.grid[r][c] = '.'
+        S.gems[t] = (S.gems[t] || 0) + 1
+        burst(c * T + T / 2, r * T + T / 2, t === 'r' ? '#ff5a5a' : '#5ab0ff', 8)
+      }
+    })
+  }
+
+  // 문 도착: 몸 전체가 문 칸과 겹치면 도착
+  for (const p of [S.fire, S.water]) {
+    const [dx, dy] = LEVELS[S.idx].doors[p.kind === 'fire' ? 'K' : 'L']
+    if (p.x + p.w > dx * T && p.x < dx * T + T && p.y + p.h > dy * T && p.y < dy * T + T) p.arrived = true
+  }
+  if (S.fire.arrived && S.water.arrived && S.deadT <= 0) {
+    S.won = true
+    S.doneT = 1.4
+    S.msg = S.idx + 1 < LEVELS.length ? '두 캐릭터가 문에 도착! 다음 판' : '모든 판을 클리어했어요!'
+    S.msgT = 1.6
+  }
+  pressed = {}
+}
+
+// 가운데 연결 확인: 판마다 두 캐릭터가 각자 문까지 갈 수 있는지 (문틀이 열린 상태로) 격자 탐색
+function reachable(idx) {
+  const L = LEVELS[idx]
+  const g = buildGrid(L)
+  const open = (c, r) => {
+    const t = g[r] && g[r][c]
+    return t !== undefined && t !== '#' && t !== 'D'
+  }
+  const walk = (start, goal, hazard) => {
+    const q = [start], seen = new Set([start.join(',')])
+    while (q.length) {
+      const [c, r] = q.shift()
+      if (c === goal[0] && r === goal[1]) return true
+      const moves = []
+      const onGround = !open(c, r + 1) || g[r + 1][c] === '#' || g[r + 1][c] === 'D'
+      const cand = []
+      if (onGround) {
+        cand.push([c - 1, r], [c + 1, r])
+        for (let dx = -3; dx <= 3; dx++) for (let dy = 1; dy <= 3; dy++) cand.push([c + dx, r - dy])
+      } else {
+        cand.push([c, r + 1], [c - 1, r], [c + 1, r])
+      }
+      for (const [nc, nr] of cand) {
+        if (!open(nc, nr)) continue
+        if (g[nr][nc] === hazard) continue
+        const key = nc + ',' + nr
+        if (seen.has(key)) continue
+        seen.add(key)
+        q.push([nc, nr])
+      }
+    }
+    return false
+  }
+  const f = walk(L.fire, L.doors.K, 'W')
+  const w = walk(L.water, L.doors.L, 'F')
+  return f && w
+}
+
+// ---------- 그리기 ----------
+function drawTile(t, c, r, x, y) {
+  if (t === '#') {
+    ctx.fillStyle = '#3a3150'; ctx.fillRect(x, y, T, T)
+    ctx.fillStyle = '#4e4368'; ctx.fillRect(x, y, T, 6)
+  } else if (t === 'F') {
+    ctx.fillStyle = '#ff6a2a'; ctx.fillRect(x, y + 6, T, T - 6)
+    ctx.fillStyle = '#ffc04a'; ctx.fillRect(x, y + 6 + Math.sin(S.t * 6 + c) * 2, T, 4)
+  } else if (t === 'W') {
+    ctx.fillStyle = '#2a7bd6'; ctx.fillRect(x, y + 6, T, T - 6)
+    ctx.fillStyle = '#7fd0ff'; ctx.fillRect(x, y + 6 + Math.sin(S.t * 6 + c) * 2, T, 4)
+  } else if (t === 'P') {
+    ctx.fillStyle = '#c8a040'; ctx.fillRect(x + 2, y + T - 8, T - 4, 8)
+  } else if (t === 'D') {
+    ctx.fillStyle = S.gateOpen ? 'rgba(180,180,220,0.25)' : '#8d8da8'
+    ctx.fillRect(x + 10, y, 12, T)
+  } else if (t === 'K' || t === 'L') {
+    const col = t === 'K' ? '#ff6a2a' : '#5ab0ff'
+    ctx.fillStyle = col
+    ctx.beginPath(); ctx.arc(x + T / 2, y + T, T / 2 - 2, Math.PI, 0); ctx.fill()
+    ctx.fillStyle = '#111'
+    ctx.beginPath(); ctx.arc(x + T / 2, y + T, T / 2 - 8, Math.PI, 0); ctx.fill()
+  } else if (t === 'r') {
+    ctx.fillStyle = '#ff4a4a'; ctx.beginPath(); ctx.arc(x + T / 2, y + T / 2 + Math.sin(S.t * 4 + c) * 2, 6, 0, Math.PI * 2); ctx.fill()
+  } else if (t === 'b') {
+    ctx.fillStyle = '#4ab0ff'; ctx.beginPath(); ctx.arc(x + T / 2, y + T / 2 + Math.sin(S.t * 4 + c) * 2, 6, 0, Math.PI * 2); ctx.fill()
+  }
+}
+
+function drawFire(p) {
+  const x = p.x, y = p.y
+  ctx.fillStyle = '#ff7a2a'
+  ctx.beginPath(); ctx.moveTo(x + 12, y); ctx.quadraticCurveTo(x + 24, y + 14, x + 20, y + 28); ctx.lineTo(x + 4, y + 28); ctx.quadraticCurveTo(x, y + 14, x + 12, y); ctx.fill()
+  ctx.fillStyle = '#ffe066'
+  ctx.beginPath(); ctx.arc(x + 12, y + 20, 5, 0, Math.PI * 2); ctx.fill()
+  ctx.fillStyle = '#111'
+  ctx.fillRect(x + 8, y + 10, 3, 3); ctx.fillRect(x + 14, y + 10, 3, 3)
+}
+function drawWater(p) {
+  const x = p.x, y = p.y
+  ctx.fillStyle = '#4aa8ff'
+  ctx.beginPath(); ctx.moveTo(x + 12, y); ctx.quadraticCurveTo(x + 24, y + 14, x + 20, y + 26); ctx.quadraticCurveTo(x + 12, y + 30, x + 4, y + 26); ctx.quadraticCurveTo(x, y + 14, x + 12, y); ctx.fill()
+  ctx.fillStyle = '#fff'
+  ctx.fillRect(x + 7, y + 10, 3, 4); ctx.fillRect(x + 14, y + 10, 3, 4)
+}
+
+function draw() {
+  ctx.fillStyle = '#16142a'
+  ctx.fillRect(0, 0, W, H)
+  for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
+    const t = S.grid[r][c]
+    if (t !== '.') drawTile(t, c, r, c * T, r * T)
+  }
+  for (const q of S.particles) {
+    ctx.globalAlpha = Math.max(0, q.life * 2)
+    ctx.fillStyle = q.color
+    ctx.fillRect(q.x, q.y, 4, 4)
+  }
+  ctx.globalAlpha = 1
+  if (S.deadT <= 0) { drawFire(S.fire); drawWater(S.water) }
+
+  // HUD
+  ctx.fillStyle = 'rgba(0,0,0,0.55)'
+  ctx.fillRect(10, 10, 320, 34)
+  ctx.fillStyle = '#fff'
+  ctx.font = 'bold 14px sans-serif'
+  ctx.textBaseline = 'middle'
+  ctx.fillText(LEVELS[S.idx].name, 20, 27)
+  ctx.fillStyle = 'rgba(0,0,0,0.55)'
+  ctx.fillRect(W - 210, 10, 200, 34)
+  ctx.fillStyle = '#ff8a6a'; ctx.fillText(`🔥 ${S.gems.r}`, W - 196, 27)
+  ctx.fillStyle = '#7fc8ff'; ctx.fillText(`💧 ${S.gems.b}`, W - 120, 27)
+  ctx.textBaseline = 'alphabetic'
+
+  if (S.msgT > 0 && S.msg) {
+    ctx.save()
+    ctx.globalAlpha = Math.min(1, S.msgT)
+    ctx.font = 'bold 20px sans-serif'
+    ctx.textAlign = 'center'
+    ctx.fillStyle = 'rgba(0,0,0,0.6)'
+    const tw = ctx.measureText(S.msg).width
+    ctx.fillRect(W / 2 - tw / 2 - 14, H / 2 - 22, tw + 28, 38)
+    ctx.fillStyle = '#fff'
+    ctx.fillText(S.msg, W / 2, H / 2 + 6)
+    ctx.restore()
+    ctx.textAlign = 'left'
+  }
+  if (S.allDone) {
+    ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(0, 0, W, H)
+    ctx.fillStyle = '#ffe066'; ctx.font = 'bold 30px sans-serif'; ctx.textAlign = 'center'
+    ctx.fillText('모든 판 클리어!', W / 2, H / 2)
+    ctx.fillStyle = '#fff'; ctx.font = '15px sans-serif'
+    ctx.fillText('R 키를 누르면 1판부터 다시 시작해요', W / 2, H / 2 + 30)
+    ctx.textAlign = 'left'
+  }
+}
+
+// ---------- 입력 ----------
+const CTRL = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Space', 'KeyA', 'KeyD', 'KeyW', 'KeyR']
+window.addEventListener('keydown', (e) => {
+  if (CTRL.includes(e.code)) e.preventDefault()
+  if (e.code === 'KeyR' && !keys.KeyR) { newLevel(0) }
+  if (!keys[e.code]) pressed[e.code] = true
+  keys[e.code] = true
+})
+window.addEventListener('keyup', (e) => { keys[e.code] = false })
+window.addEventListener('blur', () => { for (const k of Object.keys(keys)) keys[k] = false })
+
+newLevel(0)
+let last = performance.now()
+function frame(now) {
+  const dt = Math.min(0.033, (now - last) / 1000)
+  last = now
+  update(dt)
+  draw()
+  requestAnimationFrame(frame)
+}
+requestAnimationFrame(frame)
+</script>
+</body>
+</html>

@@ -1,0 +1,359 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>텍사스 홀덤</title>
+<style>
+  body{margin:0;background:#0d2a1c;color:#f2fff6;font-family:system-ui,"Malgun Gothic",sans-serif;min-height:100vh;display:flex;flex-direction:column;align-items:center}
+  h1{font-size:16px;margin:12px 0 4px}
+  #app{width:100%;max-width:820px;padding:8px 12px 24px;box-sizing:border-box}
+  .bar{display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px;font-size:14px;margin-bottom:6px}
+  .label{font-size:13px;color:#bfe9cf;margin:12px 0 4px}
+  .cards{display:flex;flex-wrap:wrap;gap:6px;min-height:92px;align-items:flex-end}
+  .card{width:64px;height:90px;border-radius:6px;background:#fffdf5;color:#222;border:2px solid #555;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:20px;font-weight:700;box-sizing:border-box}
+  .card.red{color:#c0242f}
+  .card.back{background:#2a5ea0;color:#fff;font-size:13px;border-color:#143a6a}
+  .pot{text-align:center;font-size:18px;font-weight:700;margin:8px 0;color:#ffe066}
+  .btns{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin:12px 0}
+  button{padding:10px 16px;border:0;border-radius:8px;background:#f2c94c;color:#222;font-size:15px;font-weight:700;cursor:pointer}
+  button.ghost{background:#2a5a3f;color:#f2fff6}
+  button:disabled{opacity:.4;cursor:default}
+  input{width:90px;padding:8px;font-size:15px;border-radius:6px;border:1px solid #8ab;text-align:right}
+  #msg{min-height:44px;text-align:center;font-size:15px;margin:10px 0;background:rgba(0,0,0,.28);padding:10px;border-radius:8px;line-height:1.5}
+  .help{font-size:12px;color:#9fd8b5;text-align:center;margin-top:12px;line-height:1.7}
+</style>
+</head>
+<body>
+<h1>텍사스 홀덤 · 컴퓨터와 1:1</h1>
+<div id="app"></div>
+<div class="help">칩 1000개로 시작 · 블라인드 10/20 · 폴드, 체크/콜, 레이즈(올릴 금액 입력), 올인<br>상대 칩을 모두 가져가면 이깁니다. 간략화한 규칙입니다 (사이드 팟 없음, 1:1 전용).</div>
+<script>
+const RANK_NAME = { 11: 'J', 12: 'Q', 13: 'K', 14: 'A' }
+const CAT_NAME = ['하이카드', '원페어', '투페어', '트리플', '스트레이트', '플러시', '풀하우스', '포카드', '스트레이트 플러시']
+const SB = 10, BB = 20, START = 1000, WORDS = ['', '']
+
+function shuffle(a) {
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]]
+  }
+  return a
+}
+function freshDeck() {
+  const d = []
+  for (let s = 0; s < 4; s++) for (let r = 2; r <= 14; r++) d.push({ r, s })
+  return shuffle(d)
+}
+const cardLabel = c => (RANK_NAME[c.r] || String(c.r)) + ['♠', '♥', '♦', '♣'][c.s]
+
+// 다섯 장 평가: [족보, 비교 값들...] (값이 클수록 강함)
+function eval5(c) {
+  const rs = c.map(x => x.r).sort((a, b) => b - a)
+  const flush = c.every(x => x.s === c[0].s)
+  const uniq = [...new Set(rs)]
+  let straight = 0
+  if (uniq.length === 5) {
+    if (rs[0] - rs[4] === 4) straight = rs[0]
+    else if (rs.join() === '14,5,4,3,2') straight = 5
+  }
+  const cnt = {}
+  rs.forEach(r => { cnt[r] = (cnt[r] || 0) + 1 })
+  const groups = Object.keys(cnt).map(Number).sort((a, b) => cnt[b] - cnt[a] || b - a)
+  const counts = groups.map(g => cnt[g])
+  if (straight && flush) return [8, straight]
+  if (counts[0] === 4) return [7, groups[0], groups[1]]
+  if (counts[0] === 3 && counts[1] === 2) return [6, groups[0], groups[1]]
+  if (flush) return [5, ...rs]
+  if (straight) return [4, straight]
+  if (counts[0] === 3) return [3, groups[0], groups[1], groups[2]]
+  if (counts[0] === 2 && counts[1] === 2) return [2, groups[0], groups[1], groups[2]]
+  if (counts[0] === 2) return [1, groups[0], ...groups.slice(1)]
+  return [0, ...rs]
+}
+function cmp(a, b) {
+  for (let i = 0; i < Math.max(a.length, b.length); i++) {
+    const x = a[i] || 0, y = b[i] || 0
+    if (x !== y) return x - y
+  }
+  return 0
+}
+// 7장 중 가장 강한 5장 조합
+function best(cards) {
+  let top = null
+  for (let i = 0; i < cards.length; i++) for (let j = i + 1; j < cards.length; j++) {
+    const five = cards.filter((_, k) => k !== i && k !== j)
+    const v = eval5(five)
+    if (!top || cmp(v, top) > 0) top = v
+  }
+  return top
+}
+
+let S = null
+function newGame() {
+  S = { chips: [START, START], dealer: 0, phase: 'play', msg: '', raiseAmt: 40, showdown: false, pot: 0, hands: 0, sched: false }
+  startHand()
+  render()
+}
+
+function startHand() {
+  if (S.chips[0] <= 0 || S.chips[1] <= 0) {
+    S.phase = 'over'
+    S.msg = S.chips[0] <= 0 ? '칩을 모두 잃었어요. 컴퓨터가 이겼어요.' : '칩을 모두 따냈어요! 이겼어요!'
+    return render()
+  }
+  const d = freshDeck()
+  S.deck = d
+  S.hole = [[d.pop(), d.pop()], [d.pop(), d.pop()]]
+  S.board = []
+  S.folded = [false, false]
+  S.bet = [0, 0]
+  S.acted = [false, false]
+  S.pot = 0
+  S.street = 'pre'
+  S.showdown = false
+  S.hands += 1
+  put(S.dealer, Math.min(SB, S.chips[S.dealer]))
+  put(1 - S.dealer, Math.min(BB, S.chips[1 - S.dealer]))
+  S.phase = 'play'
+  S.msg = S.dealer === 0 ? '블라인드 10 · 내가 딜러(스몰블라인드)입니다.' : '블라인드 10 · 컴퓨터가 딜러입니다.'
+  beginBetting()
+}
+
+function put(p, a) {
+  S.chips[p] -= a
+  S.bet[p] += a
+  S.pot += a
+}
+const maxBet = () => Math.max(S.bet[0], S.bet[1])
+const canAct = p => !S.folded[p] && S.chips[p] > 0
+
+// 이번 라운드에서 다음으로 행동할 사람 (없으면 -1)
+function nextToAct(from) {
+  const o = 1 - from
+  if (!canAct(o)) return -1
+  if (S.bet[o] < maxBet()) return o
+  if (!S.acted[o]) return o
+  return -1
+}
+
+// 베팅 라운드 시작: 둘 다 행동 가능하면 차례를 정하고, 아니면 자동으로 다음 단계
+function beginBetting() {
+  const c0 = canAct(0), c1 = canAct(1)
+  if (c0 && c1) {
+    S.toAct = S.street === 'pre' ? S.dealer : 1 - S.dealer
+    return
+  }
+  const only = c0 ? 0 : c1 ? 1 : -1
+  if (only >= 0 && S.bet[only] < maxBet()) {
+    S.toAct = only
+    return
+  }
+  nextStreet()
+}
+
+// 상대가 올인해서 덜 건 쪽의 초과분은 되돌려준다
+function settle() {
+  const d = S.bet[0] - S.bet[1]
+  if (d === 0) return
+  const w = d > 0 ? 0 : 1
+  const x = Math.abs(d)
+  S.bet[w] -= x
+  S.chips[w] += x
+  S.pot -= x
+}
+
+function nextStreet() {
+  settle()
+  S.bet = [0, 0]
+  S.acted = [false, false]
+  if (S.folded[0] || S.folded[1]) return endHand(S.folded[0] ? 1 : 0)
+  if (S.street === 'river') return showdown()
+  const nextS = { pre: 'flop', flop: 'turn', turn: 'river' }[S.street]
+  S.street = nextS
+  if (nextS === 'flop') S.board.push(S.deck.pop(), S.deck.pop(), S.deck.pop())
+  else S.board.push(S.deck.pop())
+  beginBetting()
+}
+
+// 사람이나 컴퓨터의 행동 처리
+function act(p, kind, inc) {
+  if (S.phase !== 'play' || S.toAct !== p) return
+  const o = 1 - p
+  const toCall = maxBet() - S.bet[p]
+  if (kind === 'fold') {
+    S.folded[p] = true
+    S.msg = p === 0 ? '폴드했어요.' : '컴퓨터가 폴드했어요.'
+    return endHand(o)
+  }
+  if (kind === 'check') {
+    if (toCall > 0) return
+    S.acted[p] = true
+    S.msg = p === 0 ? '체크했어요.' : '컴퓨터가 체크했어요.'
+  } else if (kind === 'call') {
+    put(p, Math.min(toCall, S.chips[p]))
+    S.acted[p] = true
+    S.msg = p === 0 ? `콜 ${toCall}` : `컴퓨터가 콜 ${toCall}`
+  } else {
+    const target = kind === 'allin'
+      ? S.bet[p] + S.chips[p]
+      : Math.min(maxBet() + inc, S.bet[p] + S.chips[p])
+    if (kind === 'raise' && target <= maxBet()) {
+      put(p, Math.min(toCall, S.chips[p]))
+      S.acted[p] = true
+      S.msg = p === 0 ? `콜 ${toCall}` : `컴퓨터가 콜 ${toCall}`
+    } else {
+      put(p, target - S.bet[p])
+      S.acted[p] = true
+      if (S.bet[p] > S.bet[o]) S.acted[o] = false
+      S.msg = p === 0 ? `레이즈! ${S.bet[p]}까지` : `컴퓨터가 ${S.bet[p]}까지 레이즈`
+    }
+  }
+  const t = nextToAct(p)
+  if (t >= 0) S.toAct = t
+  else nextStreet()
+  render()
+}
+
+// 현재 패의 세기 (0~1)
+function strength(p) {
+  const cards = S.hole[p].concat(S.board)
+  if (S.board.length === 0) {
+    const [a, b] = S.hole[p]
+    if (a.r === b.r) return 0.8
+    const hi = Math.max(a.r, b.r), lo = Math.min(a.r, b.r)
+    return 0.2 + (hi + lo) / 40 + (a.s === b.s ? 0.05 : 0)
+  }
+  const v = best(cards)
+  const cat = v[0]
+  if (cat === 0) return 0.2 + v[1] / 60
+  if (cat === 1) return 0.45 + (v[1] / 14) * 0.1
+  if (cat === 2) return 0.65
+  if (cat === 3) return 0.75
+  return Math.min(0.97, 0.85 + cat * 0.02)
+}
+
+// 컴퓨터 판단: 패가 강하면 레이즈, 보통이면 콜, 약하면 체크 또는 폴드
+function cpuTurn() {
+  if (S.phase !== 'play' || S.toAct !== 1) return
+  const toCall = maxBet() - S.bet[1]
+  const s = strength(1) + (Math.random() - 0.5) * 0.12
+  const potOdds = toCall / (S.chips[1] + toCall + 1)
+  if (s > 0.8 && S.chips[1] > 0) {
+    const inc = Math.max(BB, Math.round(S.pot / 2 / 10) * 10)
+    return act(1, 'raise', inc)
+  }
+  if (toCall === 0) return act(1, 'check')
+  if (s > potOdds + 0.25 || s > 0.5) return act(1, 'call')
+  return act(1, 'fold')
+}
+
+// 승부: 두 사람의 패를 비교해 팟을 준다
+function showdown() {
+  settle()
+  S.showdown = true
+  const a = best(S.hole[0].concat(S.board))
+  const b = best(S.hole[1].concat(S.board))
+  const c = cmp(a, b)
+  if (c > 0) { S.msg = `내 ${CAT_NAME[a[0]]} 승! (컴퓨터 ${CAT_NAME[b[0]]})`; return endHand(0) }
+  if (c < 0) { S.msg = `컴퓨터 ${CAT_NAME[b[0]]} 승… (내 ${CAT_NAME[a[0]]})`; return endHand(1) }
+  S.msg = `무승부 (${CAT_NAME[a[0]]})`
+  endHand(null)
+}
+
+function endHand(w) {
+  settle()
+  if (w === null) {
+    const half = Math.floor(S.pot / 2)
+    S.chips[0] += half
+    S.chips[1] += S.pot - half
+  } else {
+    S.chips[w] += S.pot
+    if (w === 0 && !S.msg.startsWith('내') && !S.folded[1]) S.msg = '내가 이겼어요!'
+    if (w === 1 && !S.msg.startsWith('컴퓨터') && !S.folded[0]) S.msg = '컴퓨터가 이겼어요.'
+    if (S.folded[0] || S.folded[1]) S.msg = S.folded[0] ? `폴드로 컴퓨터가 팟 ${S.pot}을(를) 가져갔어요.` : `컴퓨터가 폴드! 팟 ${S.pot}을(를) 가져갔어요.`
+    if (S.folded[1] && w === 0) S.msg = `컴퓨터가 폴드! 팟 ${S.pot}을(를) 가져갔어요.`
+  }
+  S.pot = 0
+  S.phase = 'end'
+  S.dealer = 1 - S.dealer
+  if (S.chips[0] <= 0 || S.chips[1] <= 0) S.phase = 'over'
+  render()
+}
+
+// ---------- 그리기 ----------
+function cardHTML(c) {
+  const red = c.s === 1 || c.s === 2
+  return `<div class="card ${red ? 'red' : ''}">${cardLabel(c)}</div>`
+}
+function backHTML() { return '<div class="card back">화투</div>' }
+
+function render() {
+  const app = document.getElementById('app')
+  if (!S) return
+  const myTurn = S.phase === 'play' && S.toAct === 0
+  const toCall = maxBet() - S.bet[0]
+  const cpuCards = S.hole[1] ? (S.showdown ? S.hole[1].map(cardHTML).join('') : S.hole[1].map(backHTML).join('')) : ''
+  const boardHTML = S.board.map(cardHTML).join('') || '<span style="color:#9fd8b5">아직 공개된 카드가 없어요</span>'
+  const myHTML = S.hole ? S.hole[0].map(cardHTML).join('') : ''
+
+  let btns = ''
+  if (S.phase === 'play' && myTurn) {
+    const callLabel = toCall > 0 ? `콜 ${Math.min(toCall, S.chips[0])}` : '체크'
+    btns = `
+      <button data-act="fold">폴드</button>
+      <button data-act="${toCall > 0 ? 'call' : 'check'}">${callLabel}</button>
+      <input id="amt" type="number" min="${BB}" step="10" value="${S.raiseAmt}">
+      <button data-act="raise">레이즈 (+금액)</button>
+      <button class="ghost" data-act="allin">올인</button>`
+  } else if (S.phase === 'end') {
+    btns = `<button data-act="next">다음 판</button>`
+  } else if (S.phase === 'over') {
+    btns = `<button data-act="restart">새 게임</button>`
+  } else if (S.phase === 'play') {
+    btns = `<span style="color:#9fd8b5">컴퓨터가 생각하는 중...</span>`
+  }
+
+  app.innerHTML = `
+    <div class="bar">
+      <span>딜러: ${S.dealer === 0 ? '나' : '컴퓨터'}</span>
+      <span>판 ${S.hands}</span>
+      <span>내 칩 <b>${S.chips[0]}</b> · 컴퓨터 칩 <b>${S.chips[1]}</b></span>
+    </div>
+    <div class="label">컴퓨터 패 ${S.folded[1] ? '(폴드)' : ''}</div>
+    <div class="cards">${cpuCards}</div>
+    <div class="pot">팟 ${S.pot} · ${({ pre: '프리플랍', flop: '플랍', turn: '턴', river: '리버' })[S.street] || ''}</div>
+    <div class="label">공개 카드</div>
+    <div class="cards">${boardHTML}</div>
+    <div class="label">내 패 ${S.folded[0] ? '(폴드)' : ''} · 이번 라운드 베팅 ${S.bet[0]}</div>
+    <div class="cards">${myHTML}</div>
+    <div id="msg">${S.msg || ''}</div>
+    <div class="btns">${btns}</div>
+  `
+  if (S.phase === 'play' && S.toAct === 1 && !S.sched) {
+    S.sched = true
+    setTimeout(() => { S.sched = false; cpuTurn() }, 700)
+  }
+}
+
+// ---------- 입력 ----------
+document.getElementById('app').addEventListener('input', (e) => {
+  if (e.target && e.target.id === 'amt') S.raiseAmt = Number(e.target.value) || BB
+})
+document.getElementById('app').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-act]')
+  if (!b) return
+  const k = b.dataset.act
+  if (k === 'next') { startHand(); return render() }
+  if (k === 'restart') { newGame(); return }
+  if (k === 'raise') {
+    const inc = Math.max(BB, Number(S.raiseAmt) || BB)
+    return act(0, 'raise', inc)
+  }
+  act(0, k)
+})
+
+newGame()
+</script>
+</body>
+</html>

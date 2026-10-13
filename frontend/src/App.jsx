@@ -930,6 +930,8 @@ function App() {
   if (screen === 'action') return <ActionGame onExit={toSelect} />
   if (screen === 'forest') return <ForestQuest onExit={toSelect} />
   if (screen === 'gostop') return <GameFrame title="고스톱" src="/games/gostop/index.html" onExit={toSelect} />
+  if (screen === 'holdem') return <GameFrame title="텍사스 홀덤" src="/games/holdem/index.html" onExit={toSelect} />
+  if (screen === 'fireice') return <GameFrame title="불과 물" src="/games/fireice/index.html" onExit={toSelect} />
   return <Roguelike onExit={toSelect} />
 }
 
