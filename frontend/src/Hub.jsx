@@ -69,16 +69,6 @@ const GAMES = [
     color: '#5ee6ff',
   },
   {
-    id: 'arke',
-    no: 8,
-    name: '아르케 넷 0417',
-    folder: 'story',
-    genre: '스토리 · 선택형 (미스터리)',
-    desc: '로그아웃이 막힌 가상현실 MMO에서 10년 전 사고의 진실을 파헤쳐요. 선택에 따라 4가지 엔딩이 갈려요.',
-    sprite: 'merchant',
-    color: '#c9b8ff',
-  },
-  {
     id: 'road',
     no: 9,
     name: '항로 0417',
