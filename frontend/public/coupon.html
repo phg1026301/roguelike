@@ -522,4 +522,12 @@ Object.keys(DATA).forEach(function(k){
 render("커리어");
 </script>
 
-</body></html>
+<script>
+/* FAQ 질문 열람 추적 (Amplitude SDK) */
+document.addEventListener('toggle',function(e){
+  var d=e.target;
+  if(!d||d.tagName!=='DETAILS'||!d.closest('.faq')||!d.open)return;
+  var all=Array.prototype.slice.call(d.closest('.faq').querySelectorAll('details'));
+  try{window.amplitude.track('faq_open',{question:d.querySelector('summary').textContent.trim(),question_index:all.indexOf(d)+1,page_name:'class101_coupon_landing'});}catch(err){}
+},true);
+</script></body></html>
