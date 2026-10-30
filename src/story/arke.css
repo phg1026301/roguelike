@@ -1,0 +1,9 @@
+/* 아르케 넷 0417: 네온 시티와 다른 어두운 청보라 톤 */
+.arke-theme.bg-town { background: linear-gradient(#0b1020, #1b2a4a 60%, #0e1a2e); }
+.arke-theme.bg-field { background: linear-gradient(#0c1a0f, #1f3d22 60%, #11210f); }
+.arke-theme.bg-cave { background: linear-gradient(#050818, #101a3a 60%, #070b1f); }
+.arke-theme.bg-tower { background: linear-gradient(#0a0a14, #25203e 60%, #120e22); }
+.arke-theme .st-choice { border-color: #9ef0ff; }
+.arke-theme .st-scene-tag { color: #9ef0ff; border-color: #9ef0ff; }
+.arke-theme .st-head h1 { color: #c9b8ff; }
+.arke-theme .st-portrait-img { width: 100%; height: 100%; object-fit: cover; display: block; }

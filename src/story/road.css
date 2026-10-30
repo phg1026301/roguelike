@@ -1,0 +1,8 @@
+/* 항로 0417: 그림 없이 글자와 배경 색으로만 진행 */
+.road-theme.bg-station { background: linear-gradient(#0a1424, #1d2d46 60%, #0d1826); }
+.road-theme.bg-city { background: linear-gradient(#2a1a10, #5a3a20 60%, #1d120a); }
+.road-theme.bg-ruins { background: linear-gradient(#1a0c0c, #3a1c18 60%, #120707); }
+.road-theme.bg-space { background: radial-gradient(circle at 50% 30%, #1b1040, #05040d 70%); }
+.road-theme .st-choice { border-color: #7fb8ff; }
+.road-theme .st-scene-tag { color: #7fb8ff; border-color: #7fb8ff; }
+.road-theme .st-head h1 { color: #9fd0ff; }
